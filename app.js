@@ -155,6 +155,88 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
   tab.addEventListener('click', () => switchMainTab(tab.dataset.tab));
 });
 
+const DEFAULT_TOOLBAR_TABS = ['dashboard', 'quests', 'workout', 'hard75', 'achievements'];
+
+function getSavedToolbarTabs() {
+  try {
+    const raw = localStorage.getItem('fitquest-toolbar-tabs');
+    if (!raw) return [...DEFAULT_TOOLBAR_TABS];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [...DEFAULT_TOOLBAR_TABS];
+    const available = DEFAULT_TOOLBAR_TABS.filter(id =>
+      document.querySelector(`.nav-tab[data-nav-id="${id}"]`)
+    );
+    const cleaned = parsed.filter(id => available.includes(id));
+    return cleaned.length >= 3 ? cleaned : [...DEFAULT_TOOLBAR_TABS];
+  } catch {
+    return [...DEFAULT_TOOLBAR_TABS];
+  }
+}
+
+function applyToolbarTabs(tabIds) {
+  const allowed = new Set(tabIds);
+  document.querySelectorAll('.nav-tab[data-nav-id]').forEach(tab => {
+    tab.classList.toggle('hidden', !allowed.has(tab.dataset.navId));
+  });
+
+  const currentActive = document.querySelector('.nav-tab.active');
+  if (currentActive && currentActive.classList.contains('hidden')) {
+    const firstVisible = document.querySelector('.nav-tab[data-nav-id]:not(.hidden)');
+    if (firstVisible) switchMainTab(firstVisible.dataset.tab);
+  }
+}
+
+function renderToolbarOptions(selectedIds) {
+  const container = document.getElementById('toolbarOptions');
+  if (!container) return;
+  const selected = new Set(selectedIds);
+  const labels = {
+    dashboard: 'Dashboard',
+    quests: 'Quests',
+    workout: 'Workout',
+    hard75: '75 Hard',
+    achievements: 'Achievements'
+  };
+  container.innerHTML = DEFAULT_TOOLBAR_TABS.map(id => `
+    <label class="toolbar-option">
+      <input type="checkbox" data-toolbar-id="${id}" ${selected.has(id) ? 'checked' : ''}>
+      <span>${labels[id]}</span>
+    </label>
+  `).join('');
+}
+
+function initToolbarSettings() {
+  const openBtn = document.getElementById('openToolbarSettings');
+  const closeBtn = document.getElementById('closeToolbarSettings');
+  const saveBtn = document.getElementById('saveToolbarSettings');
+  const modal = document.getElementById('toolbarSettingsModal');
+  if (!openBtn || !closeBtn || !saveBtn || !modal) return;
+
+  applyToolbarTabs(getSavedToolbarTabs());
+
+  openBtn.addEventListener('click', () => {
+    renderToolbarOptions(getSavedToolbarTabs());
+    modal.classList.remove('hidden');
+  });
+
+  closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
+  modal.addEventListener('click', (e) => {
+    if (e.target.id === 'toolbarSettingsModal') modal.classList.add('hidden');
+  });
+
+  saveBtn.addEventListener('click', () => {
+    const selected = [...modal.querySelectorAll('input[data-toolbar-id]:checked')]
+      .map(el => el.dataset.toolbarId);
+    if (selected.length < 3) {
+      alert('Keep at least 3 tabs for quick navigation.');
+      return;
+    }
+    localStorage.setItem('fitquest-toolbar-tabs', JSON.stringify(selected));
+    applyToolbarTabs(selected);
+    modal.classList.add('hidden');
+  });
+}
+
 let workoutSubviewTransitionId = 0;
 function setWorkoutView(view) {
   const current = document.querySelector('.workout-subpage.active');
@@ -1025,6 +1107,7 @@ state.gymWorkouts = state.gymWorkouts || [];
 state.workoutTemplates = state.workoutTemplates || [];
 state.hard75 = state.hard75 || { dayStreak: 0, lastCompletedDate: null, logs: {} };
 updateUI();
+initToolbarSettings();
 initGymTracker();
 initWorkoutSubpages();
 initProgressTab();

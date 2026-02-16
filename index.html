@@ -40,31 +40,46 @@
           <span class="stat-value" id="streakCount">0</span>
           <span class="streak-icon">🔥</span>
         </div>
+        <button type="button" class="toolbar-settings-btn" id="openToolbarSettings" title="Customize toolbar">⚙️</button>
       </div>
     </header>
 
     <nav class="nav-tabs">
-      <button class="nav-tab active" data-tab="dashboard">
+      <button class="nav-tab active" data-tab="dashboard" data-nav-id="dashboard">
         <span class="nav-icon">🏠</span>
         <span class="nav-label">Dashboard</span>
       </button>
-      <button class="nav-tab" data-tab="quests">
+      <button class="nav-tab" data-tab="quests" data-nav-id="quests">
         <span class="nav-icon">✨</span>
         <span class="nav-label">Quests</span>
       </button>
-      <button class="nav-tab" data-tab="workout">
+      <button class="nav-tab" data-tab="workout" data-nav-id="workout">
         <span class="nav-icon">🏋️</span>
         <span class="nav-label">Workout</span>
       </button>
-      <button class="nav-tab" data-tab="hard75">
+      <button class="nav-tab" data-tab="hard75" data-nav-id="hard75">
         <span class="nav-icon">🔥</span>
         <span class="nav-label">75 Hard</span>
       </button>
-      <button class="nav-tab" data-tab="achievements">
+      <button class="nav-tab" data-tab="achievements" data-nav-id="achievements">
         <span class="nav-icon">🏆</span>
         <span class="nav-label">Achievements</span>
       </button>
     </nav>
+
+    <div id="toolbarSettingsModal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Customize Toolbar</h3>
+          <button type="button" class="modal-close" id="closeToolbarSettings">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="toolbar-help">Pick which tabs appear in your bottom toolbar.</p>
+          <div id="toolbarOptions" class="toolbar-options"></div>
+          <button type="button" class="btn btn-primary" id="saveToolbarSettings">Save Toolbar</button>
+        </div>
+      </div>
+    </div>
 
     <main class="main-content">
       <!-- Dashboard Tab -->

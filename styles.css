@@ -71,6 +71,20 @@ body {
   flex-wrap: wrap;
 }
 
+.toolbar-settings-btn {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: 10px;
+  padding: 0.45rem 0.65rem;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.toolbar-settings-btn:hover {
+  border-color: var(--accent-primary);
+}
+
 .stat {
   display: flex;
   flex-direction: column;
@@ -175,6 +189,10 @@ body {
   background: var(--accent-primary);
   color: var(--bg-dark);
   border-color: var(--accent-primary);
+}
+
+.nav-tab.hidden {
+  display: none !important;
 }
 
 /* Workout Container + Subpages */
@@ -902,6 +920,32 @@ body {
 .modal-body {
   padding: 1rem 1.5rem;
   overflow-y: auto;
+}
+
+.toolbar-help {
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.toolbar-options {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.toolbar-option {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+}
+
+.toolbar-option input {
+  accent-color: var(--accent-primary);
 }
 
 .exercise-filter {

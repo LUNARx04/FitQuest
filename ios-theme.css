@@ -67,6 +67,15 @@
     border-radius: var(--radius-md);
   }
 
+  .toolbar-settings-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    min-height: 38px;
+    min-width: 38px;
+    padding: 0.35rem 0.5rem;
+  }
+
   /* Main content — scrollable */
   .main-content {
     flex: 1;
@@ -160,6 +169,12 @@
     background: rgba(0, 217, 165, 0.25);
     color: #00d9a5;
     border: 1px solid rgba(0, 217, 165, 0.3);
+  }
+
+  .toolbar-option {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--glass-border);
+    border-radius: 12px;
   }
 
   /* Cards — glass material */
