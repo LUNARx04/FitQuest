@@ -1,11 +1,12 @@
 // FitQuest Service Worker
-const CACHE_NAME = 'fitquest-v1';
+const CACHE_NAME = 'fitquest-v2';
 const ASSETS = [
   './',
   './index.html',
   './styles.css',
   './ios-theme.css',
   './app.js',
+  './cloud-config.js',
   './exercises.js',
   './manifest.json',
   './icon.svg'

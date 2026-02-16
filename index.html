@@ -15,6 +15,9 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="ios-theme.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 </head>
 <body>
   <div id="app">
@@ -77,6 +80,39 @@
           <p class="toolbar-help">Pick which tabs appear in your bottom toolbar.</p>
           <div id="toolbarOptions" class="toolbar-options"></div>
           <button type="button" class="btn btn-primary" id="saveToolbarSettings">Save Toolbar</button>
+
+          <div class="settings-divider"></div>
+          <h4 class="settings-title">Account & Cloud Sync</h4>
+          <p class="settings-note">Sign in to sync progress across devices. Local cache always stays available.</p>
+          <p id="authStatus" class="data-action-status">Not signed in</p>
+          <div class="account-grid">
+            <input type="email" id="authEmail" placeholder="Email">
+            <input type="password" id="authPassword" placeholder="Password">
+          </div>
+          <div class="settings-actions">
+            <button type="button" class="btn btn-secondary" id="signUpBtn">Sign Up</button>
+            <button type="button" class="btn btn-secondary" id="signInBtn">Sign In</button>
+            <button type="button" class="btn btn-secondary" id="signOutBtn">Sign Out</button>
+            <button type="button" class="btn btn-secondary" id="syncNowBtn">Sync Now</button>
+          </div>
+
+          <div class="settings-divider"></div>
+          <h4 class="settings-title">Data Management</h4>
+          <p class="settings-note">Export or import your progress, routines, charts, and toolbar settings.</p>
+          <div class="settings-inline">
+            <label for="importMode">Import mode</label>
+            <select id="importMode">
+              <option value="replace">Replace existing data</option>
+              <option value="merge">Merge with existing data</option>
+            </select>
+          </div>
+          <div class="settings-actions">
+            <button type="button" class="btn btn-secondary" id="exportJsonBtn">Export JSON</button>
+            <button type="button" class="btn btn-secondary" id="exportCsvBtn">Export CSV</button>
+            <button type="button" class="btn btn-secondary" id="importJsonBtn">Import JSON</button>
+          </div>
+          <input type="file" id="importJsonInput" accept=".json,application/json" class="hidden-file-input">
+          <p id="dataActionStatus" class="data-action-status"></p>
         </div>
       </div>
     </div>
@@ -339,6 +375,7 @@
     </main>
   </div>
 
+  <script src="cloud-config.js"></script>
   <script src="exercises.js"></script>
   <script src="app.js"></script>
 </body>

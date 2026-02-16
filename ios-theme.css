@@ -190,6 +190,26 @@
     border-radius: 12px;
   }
 
+  .settings-divider {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .settings-inline select {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--glass-border);
+    color: #fff;
+  }
+
+  .account-grid input {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: var(--glass-border);
+    color: #fff;
+  }
+
+  .data-action-status {
+    color: rgba(235, 235, 245, 0.75);
+  }
+
   /* Cards — glass material */
   .card,
   .welcome-card,

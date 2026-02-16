@@ -9,6 +9,8 @@
 - **Gym Tracker** — Hevy-style workout builder with 80+ exercises, set/rep/weight tracking, rest timer
 - **Progress Graphs** — Chart weight, reps, or volume over time for each exercise
 - **Workout Templates** — Save and load workout routines for quick reuse
+- **Data Portability** — Export JSON/CSV and import JSON with merge/replace
+- **Account + Cloud Sync** — Optional Firebase auth/sync for cross-device progress
 - **75 Hard** — Track the mental toughness challenge (diet, 2 workouts, water, reading, photo)
 - **Log Workouts** — Track runs, gym sessions, yoga, cycling, and more with duration and intensity
 - **Achievements** — Unlock badges for milestones (first workout, level 5, 7-day streak, etc.)
@@ -33,6 +35,19 @@ To install FitQuest as an app on your iPhone:
 5. Tap **Add**
 
 The app opens full-screen with the iOS 26 Liquid Glass design. Data is stored in your browser.
+
+## Optional Cloud Sync Setup
+
+FitQuest supports email/password auth + cloud sync via Firebase.
+
+1. Create a Firebase project and enable:
+   - Authentication → Email/Password
+   - Firestore Database
+2. Open `cloud-config.js`
+3. Replace `window.FITQUEST_CLOUD_CONFIG = null;` with your Firebase web config object
+4. Reload the app and sign in from the toolbar settings modal
+
+If no Firebase config is provided, the app still works fully with local storage only.
 
 ## Tech Stack
 

@@ -17,6 +17,25 @@ const state = {
   }
 };
 
+const APP_STORAGE_KEY = 'fitquest-state';
+const TOOLBAR_STORAGE_KEY = 'fitquest-toolbar-tabs';
+const EXPORT_SCHEMA_VERSION = 1;
+const CLOUD_PENDING_KEY = 'fitquest-pending-sync';
+const CLOUD_DOC_ID = 'current';
+
+const cloudSync = {
+  enabled: false,
+  app: null,
+  auth: null,
+  db: null,
+  user: null,
+  initialized: false,
+  syncing: false,
+  authReady: false,
+  skipNextSaveQueue: false,
+  syncTimer: null
+};
+
 // Gym tracker state
 let gymState = {
   exercises: [],
@@ -62,7 +81,7 @@ function getTotalXP() {
 
 // Load from localStorage
 function loadState() {
-  const saved = localStorage.getItem('fitquest-state');
+  const saved = localStorage.getItem(APP_STORAGE_KEY);
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
@@ -75,7 +94,7 @@ function loadState() {
 
 // Save to localStorage
 function saveState() {
-  localStorage.setItem('fitquest-state', JSON.stringify({
+  localStorage.setItem(APP_STORAGE_KEY, JSON.stringify({
     level: state.level,
     xp: state.xp,
     xpToNextLevel: state.xpToNextLevel,
@@ -87,6 +106,354 @@ function saveState() {
     completedQuests: state.completedQuests,
     hard75: state.hard75
   }));
+
+  if (cloudSync.skipNextSaveQueue) {
+    cloudSync.skipNextSaveQueue = false;
+    return;
+  }
+  queueCloudSync();
+}
+
+function setDataActionStatus(message, isError = false) {
+  const el = document.getElementById('dataActionStatus');
+  if (!el) return;
+  el.textContent = message || '';
+  el.style.color = isError ? '#ef4444' : '';
+}
+
+function escapeCsv(value) {
+  const text = String(value ?? '');
+  if (text.includes(',') || text.includes('"') || text.includes('\n')) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+}
+
+function toCsv(headers, rows) {
+  const lines = [];
+  lines.push(headers.map(escapeCsv).join(','));
+  rows.forEach(row => lines.push(row.map(escapeCsv).join(',')));
+  return lines.join('\n');
+}
+
+function buildExportPayload() {
+  const snapshot = JSON.parse(JSON.stringify({
+    level: state.level,
+    xp: state.xp,
+    xpToNextLevel: state.xpToNextLevel,
+    streak: state.streak,
+    lastWorkoutDate: state.lastWorkoutDate,
+    workouts: state.workouts,
+    gymWorkouts: state.gymWorkouts,
+    workoutTemplates: state.workoutTemplates,
+    completedQuests: state.completedQuests,
+    hard75: state.hard75
+  }));
+
+  return {
+    version: EXPORT_SCHEMA_VERSION,
+    exportedAt: new Date().toISOString(),
+    state: snapshot,
+    toolbarTabs: getSavedToolbarTabs()
+  };
+}
+
+function buildCsvExport() {
+  const sections = [];
+
+  const workoutRows = (state.workouts || []).map(w => [
+    w.id, w.type, w.duration, w.intensity, w.notes, w.xp, w.date
+  ]);
+  sections.push('WORKOUTS');
+  sections.push(toCsv(['id', 'type', 'duration_minutes', 'intensity', 'notes', 'xp', 'date_iso'], workoutRows));
+
+  const setRows = [];
+  (state.gymWorkouts || []).forEach(w => {
+    (w.exercises || []).forEach(ex => {
+      (ex.sets || []).forEach((set, idx) => {
+        setRows.push([
+          w.id, w.date, ex.id, ex.name, ex.muscle, idx + 1, set.reps ?? '', set.weight ?? ''
+        ]);
+      });
+    });
+  });
+  sections.push('');
+  sections.push('GYM_WORKOUT_SETS');
+  sections.push(toCsv(
+    ['workout_id', 'date_iso', 'exercise_id', 'exercise_name', 'muscle', 'set_number', 'reps', 'weight'],
+    setRows
+  ));
+
+  const templateRows = [];
+  (state.workoutTemplates || []).forEach(t => {
+    (t.exercises || []).forEach(ex => {
+      templateRows.push([t.id, t.name, ex.id, ex.name, ex.muscle, (ex.sets || []).length]);
+    });
+  });
+  sections.push('');
+  sections.push('WORKOUT_TEMPLATES');
+  sections.push(toCsv(['template_id', 'template_name', 'exercise_id', 'exercise_name', 'muscle', 'set_count'], templateRows));
+
+  const hard75Rows = Object.entries((state.hard75 && state.hard75.logs) || {}).map(([date, log]) => ([
+    date,
+    !!log.diet,
+    !!log.workout1,
+    !!log.workout2Outdoor,
+    !!log.water,
+    !!log.read,
+    !!log.photo
+  ]));
+  sections.push('');
+  sections.push('HARD75_LOGS');
+  sections.push(toCsv(['date', 'diet', 'workout1', 'workout2Outdoor', 'water', 'read', 'photo'], hard75Rows));
+
+  sections.push('');
+  sections.push('SETTINGS');
+  sections.push(toCsv(['key', 'value'], [['toolbarTabs', getSavedToolbarTabs().join('|')]]));
+
+  return sections.join('\n');
+}
+
+function downloadTextFile(filename, content, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function sanitizeImportedState(raw) {
+  if (!raw || typeof raw !== 'object') throw new Error('Invalid import file format.');
+
+  const safe = {
+    level: Number.isFinite(raw.level) ? Math.max(1, Math.floor(raw.level)) : 1,
+    xp: Number.isFinite(raw.xp) ? Math.max(0, Math.floor(raw.xp)) : 0,
+    xpToNextLevel: Number.isFinite(raw.xpToNextLevel) ? Math.max(1, Math.floor(raw.xpToNextLevel)) : 100,
+    streak: Number.isFinite(raw.streak) ? Math.max(0, Math.floor(raw.streak)) : 0,
+    lastWorkoutDate: typeof raw.lastWorkoutDate === 'string' ? raw.lastWorkoutDate : null,
+    workouts: Array.isArray(raw.workouts) ? raw.workouts : [],
+    gymWorkouts: Array.isArray(raw.gymWorkouts) ? raw.gymWorkouts : [],
+    workoutTemplates: Array.isArray(raw.workoutTemplates) ? raw.workoutTemplates : [],
+    completedQuests: Array.isArray(raw.completedQuests) ? raw.completedQuests : [],
+    hard75: raw.hard75 && typeof raw.hard75 === 'object' ? raw.hard75 : { dayStreak: 0, lastCompletedDate: null, logs: {} }
+  };
+
+  safe.hard75 = {
+    dayStreak: Number.isFinite(safe.hard75.dayStreak) ? Math.max(0, Math.floor(safe.hard75.dayStreak)) : 0,
+    lastCompletedDate: typeof safe.hard75.lastCompletedDate === 'string' ? safe.hard75.lastCompletedDate : null,
+    logs: safe.hard75.logs && typeof safe.hard75.logs === 'object' ? safe.hard75.logs : {}
+  };
+
+  return safe;
+}
+
+function mergeById(existing, incoming) {
+  const out = new Map();
+  (existing || []).forEach(item => {
+    const key = item && item.id != null ? String(item.id) : `existing-${Math.random()}`;
+    out.set(key, item);
+  });
+  (incoming || []).forEach(item => {
+    const key = item && item.id != null ? String(item.id) : `incoming-${Math.random()}`;
+    out.set(key, item);
+  });
+  return [...out.values()];
+}
+
+function applyImportedData(importedState, importedToolbarTabs, mode) {
+  if (mode === 'merge') {
+    state.level = Math.max(state.level, importedState.level);
+    state.xp = Math.max(state.xp, importedState.xp);
+    state.xpToNextLevel = Math.max(state.xpToNextLevel, importedState.xpToNextLevel);
+    state.streak = Math.max(state.streak, importedState.streak);
+    state.lastWorkoutDate = importedState.lastWorkoutDate || state.lastWorkoutDate;
+    state.workouts = mergeById(state.workouts, importedState.workouts);
+    state.gymWorkouts = mergeById(state.gymWorkouts, importedState.gymWorkouts);
+    state.workoutTemplates = mergeById(state.workoutTemplates, importedState.workoutTemplates);
+    state.completedQuests = [...new Set([...(state.completedQuests || []), ...(importedState.completedQuests || [])])];
+    state.hard75 = {
+      dayStreak: Math.max(state.hard75?.dayStreak || 0, importedState.hard75?.dayStreak || 0),
+      lastCompletedDate: importedState.hard75?.lastCompletedDate || state.hard75?.lastCompletedDate || null,
+      logs: { ...(state.hard75?.logs || {}), ...(importedState.hard75?.logs || {}) }
+    };
+  } else {
+    state.level = importedState.level;
+    state.xp = importedState.xp;
+    state.xpToNextLevel = importedState.xpToNextLevel;
+    state.streak = importedState.streak;
+    state.lastWorkoutDate = importedState.lastWorkoutDate;
+    state.workouts = importedState.workouts;
+    state.gymWorkouts = importedState.gymWorkouts;
+    state.workoutTemplates = importedState.workoutTemplates;
+    state.completedQuests = importedState.completedQuests;
+    state.hard75 = importedState.hard75;
+  }
+
+  if (Array.isArray(importedToolbarTabs) && importedToolbarTabs.length) {
+    localStorage.setItem(TOOLBAR_STORAGE_KEY, JSON.stringify(importedToolbarTabs));
+  }
+
+  saveState();
+  applyToolbarTabs(getSavedToolbarTabs());
+  gymState.exercises = [];
+  gymState.startTime = null;
+  renderGymExercises();
+  updateUI();
+  renderProgressExerciseOptions();
+}
+
+function hasMeaningfulStateData(inputState) {
+  if (!inputState || typeof inputState !== 'object') return false;
+  return (
+    (inputState.workouts && inputState.workouts.length > 0) ||
+    (inputState.gymWorkouts && inputState.gymWorkouts.length > 0) ||
+    (inputState.workoutTemplates && inputState.workoutTemplates.length > 0) ||
+    (inputState.completedQuests && inputState.completedQuests.length > 0) ||
+    ((inputState.hard75 && inputState.hard75.dayStreak) || 0) > 0
+  );
+}
+
+function setAuthStatus(text, isError = false) {
+  const el = document.getElementById('authStatus');
+  if (!el) return;
+  el.textContent = text || '';
+  el.style.color = isError ? '#ef4444' : '';
+}
+
+function getCloudDocRef(uid) {
+  return cloudSync.db.collection('users').doc(uid).collection('app').doc(CLOUD_DOC_ID);
+}
+
+function buildCloudSnapshot() {
+  return {
+    ...buildExportPayload(),
+    updatedAt: Date.now()
+  };
+}
+
+function savePendingCloudSnapshot(snapshot) {
+  localStorage.setItem(CLOUD_PENDING_KEY, JSON.stringify(snapshot));
+}
+
+function readPendingCloudSnapshot() {
+  try {
+    const raw = localStorage.getItem(CLOUD_PENDING_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function clearPendingCloudSnapshot() {
+  localStorage.removeItem(CLOUD_PENDING_KEY);
+}
+
+function queueCloudSync() {
+  if (!cloudSync.enabled || !cloudSync.user) return;
+  const snapshot = buildCloudSnapshot();
+  savePendingCloudSnapshot(snapshot);
+  if (cloudSync.syncTimer) clearTimeout(cloudSync.syncTimer);
+  cloudSync.syncTimer = setTimeout(() => {
+    flushCloudSyncQueue();
+  }, 700);
+}
+
+async function flushCloudSyncQueue() {
+  if (!cloudSync.enabled || !cloudSync.user || !navigator.onLine || cloudSync.syncing) return;
+  const pending = readPendingCloudSnapshot();
+  if (!pending) return;
+
+  cloudSync.syncing = true;
+  try {
+    await getCloudDocRef(cloudSync.user.uid).set({
+      ...pending,
+      uid: cloudSync.user.uid
+    }, { merge: true });
+    clearPendingCloudSnapshot();
+    setAuthStatus(`Signed in as ${cloudSync.user.email || 'user'} • Synced`);
+  } catch {
+    setAuthStatus('Sync pending (offline or network issue).');
+  } finally {
+    cloudSync.syncing = false;
+  }
+}
+
+async function pullCloudStateAndMigrate() {
+  if (!cloudSync.enabled || !cloudSync.user) return;
+  try {
+    const snap = await getCloudDocRef(cloudSync.user.uid).get();
+    const cloudData = snap.exists ? snap.data() : null;
+    const cloudStateRaw = cloudData && cloudData.state ? cloudData.state : null;
+    const cloudState = cloudStateRaw ? sanitizeImportedState(cloudStateRaw) : null;
+    const localState = sanitizeImportedState(state);
+
+    const localHasData = hasMeaningfulStateData(localState);
+    const cloudHasData = hasMeaningfulStateData(cloudState);
+
+    if (cloudHasData && localHasData) {
+      cloudSync.skipNextSaveQueue = true;
+      applyImportedData(cloudState, cloudData.toolbarTabs || null, 'merge');
+      queueCloudSync();
+    } else if (cloudHasData) {
+      cloudSync.skipNextSaveQueue = true;
+      applyImportedData(cloudState, cloudData.toolbarTabs || null, 'replace');
+    } else if (localHasData) {
+      queueCloudSync();
+      await flushCloudSyncQueue();
+    }
+  } catch {
+    setAuthStatus('Signed in, cloud sync unavailable.', true);
+  }
+}
+
+async function handleAuthState(user) {
+  cloudSync.user = user || null;
+  const emailInput = document.getElementById('authEmail');
+  if (emailInput) emailInput.value = user?.email || '';
+  if (!user) {
+    setAuthStatus('Not signed in');
+    return;
+  }
+  setAuthStatus(`Signed in as ${user.email || 'user'}`);
+  await pullCloudStateAndMigrate();
+  await flushCloudSyncQueue();
+}
+
+function initCloudSync() {
+  const config = window.FITQUEST_CLOUD_CONFIG;
+  if (!config || typeof config !== 'object') {
+    setAuthStatus('Cloud sync disabled (add Firebase config).');
+    return;
+  }
+
+  if (!window.firebase || !firebase.apps) {
+    setAuthStatus('Cloud sync unavailable.');
+    return;
+  }
+
+  try {
+    cloudSync.app = firebase.apps.length ? firebase.app() : firebase.initializeApp(config);
+    cloudSync.auth = firebase.auth();
+    cloudSync.db = firebase.firestore();
+    cloudSync.enabled = true;
+    cloudSync.initialized = true;
+
+    cloudSync.auth.onAuthStateChanged(async (user) => {
+      await handleAuthState(user);
+    });
+
+    window.addEventListener('online', () => {
+      flushCloudSyncQueue();
+    });
+  } catch {
+    cloudSync.enabled = false;
+    setAuthStatus('Cloud sync init failed.', true);
+  }
 }
 
 // Add XP and handle level up
@@ -159,7 +526,7 @@ const DEFAULT_TOOLBAR_TABS = ['dashboard', 'quests', 'workout', 'hard75', 'achie
 
 function getSavedToolbarTabs() {
   try {
-    const raw = localStorage.getItem('fitquest-toolbar-tabs');
+    const raw = localStorage.getItem(TOOLBAR_STORAGE_KEY);
     if (!raw) return [...DEFAULT_TOOLBAR_TABS];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [...DEFAULT_TOOLBAR_TABS];
@@ -209,8 +576,19 @@ function initToolbarSettings() {
   const openBtn = document.getElementById('openToolbarSettings');
   const closeBtn = document.getElementById('closeToolbarSettings');
   const saveBtn = document.getElementById('saveToolbarSettings');
+  const exportJsonBtn = document.getElementById('exportJsonBtn');
+  const exportCsvBtn = document.getElementById('exportCsvBtn');
+  const importJsonBtn = document.getElementById('importJsonBtn');
+  const importInput = document.getElementById('importJsonInput');
+  const importMode = document.getElementById('importMode');
+  const signUpBtn = document.getElementById('signUpBtn');
+  const signInBtn = document.getElementById('signInBtn');
+  const signOutBtn = document.getElementById('signOutBtn');
+  const syncNowBtn = document.getElementById('syncNowBtn');
+  const authEmail = document.getElementById('authEmail');
+  const authPassword = document.getElementById('authPassword');
   const modal = document.getElementById('toolbarSettingsModal');
-  if (!openBtn || !closeBtn || !saveBtn || !modal) return;
+  if (!openBtn || !closeBtn || !saveBtn || !modal || !exportJsonBtn || !exportCsvBtn || !importJsonBtn || !importInput || !importMode || !signUpBtn || !signInBtn || !signOutBtn || !syncNowBtn || !authEmail || !authPassword) return;
 
   applyToolbarTabs(getSavedToolbarTabs());
 
@@ -231,9 +609,111 @@ function initToolbarSettings() {
       alert('Keep at least 3 tabs for quick navigation.');
       return;
     }
-    localStorage.setItem('fitquest-toolbar-tabs', JSON.stringify(selected));
+    localStorage.setItem(TOOLBAR_STORAGE_KEY, JSON.stringify(selected));
     applyToolbarTabs(selected);
+    queueCloudSync();
     modal.classList.add('hidden');
+  });
+
+  exportJsonBtn.addEventListener('click', () => {
+    try {
+      const payload = buildExportPayload();
+      downloadTextFile(`fitquest-backup-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(payload, null, 2), 'application/json');
+      setDataActionStatus('JSON export downloaded.');
+    } catch {
+      setDataActionStatus('Could not export JSON.', true);
+    }
+  });
+
+  exportCsvBtn.addEventListener('click', () => {
+    try {
+      const csv = buildCsvExport();
+      downloadTextFile(`fitquest-export-${new Date().toISOString().slice(0, 10)}.csv`, csv, 'text/csv');
+      setDataActionStatus('CSV export downloaded.');
+    } catch {
+      setDataActionStatus('Could not export CSV.', true);
+    }
+  });
+
+  importJsonBtn.addEventListener('click', () => {
+    importInput.value = '';
+    importInput.click();
+  });
+
+  importInput.addEventListener('change', async () => {
+    const file = importInput.files && importInput.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const raw = JSON.parse(text);
+      const importedState = sanitizeImportedState(raw.state || raw);
+      const importedToolbarTabs = Array.isArray(raw.toolbarTabs) ? raw.toolbarTabs : null;
+      const mode = importMode.value === 'merge' ? 'merge' : 'replace';
+      applyImportedData(importedState, importedToolbarTabs, mode);
+      setDataActionStatus(`Import successful (${mode}).`);
+    } catch (err) {
+      setDataActionStatus('Import failed: invalid file format.', true);
+    }
+  });
+
+  signUpBtn.addEventListener('click', async () => {
+    if (!cloudSync.enabled || !cloudSync.auth) {
+      setAuthStatus('Cloud sync disabled. Add Firebase config.', true);
+      return;
+    }
+    const email = authEmail.value.trim();
+    const password = authPassword.value;
+    if (!email || password.length < 6) {
+      setAuthStatus('Use a valid email and password (6+ chars).', true);
+      return;
+    }
+    try {
+      await cloudSync.auth.createUserWithEmailAndPassword(email, password);
+      setAuthStatus(`Signed up as ${email}`);
+    } catch (e) {
+      setAuthStatus('Sign up failed. Check email/password.', true);
+    }
+  });
+
+  signInBtn.addEventListener('click', async () => {
+    if (!cloudSync.enabled || !cloudSync.auth) {
+      setAuthStatus('Cloud sync disabled. Add Firebase config.', true);
+      return;
+    }
+    const email = authEmail.value.trim();
+    const password = authPassword.value;
+    if (!email || !password) {
+      setAuthStatus('Enter email and password.', true);
+      return;
+    }
+    try {
+      await cloudSync.auth.signInWithEmailAndPassword(email, password);
+      setAuthStatus(`Signed in as ${email}`);
+    } catch {
+      setAuthStatus('Sign in failed. Check credentials.', true);
+    }
+  });
+
+  signOutBtn.addEventListener('click', async () => {
+    if (!cloudSync.enabled || !cloudSync.auth) {
+      setAuthStatus('Cloud sync disabled. Add Firebase config.', true);
+      return;
+    }
+    try {
+      await cloudSync.auth.signOut();
+      setAuthStatus('Signed out');
+    } catch {
+      setAuthStatus('Sign out failed.', true);
+    }
+  });
+
+  syncNowBtn.addEventListener('click', async () => {
+    if (!cloudSync.enabled || !cloudSync.user) {
+      setAuthStatus('Sign in to sync.');
+      return;
+    }
+    queueCloudSync();
+    await flushCloudSyncQueue();
   });
 }
 
@@ -1109,6 +1589,7 @@ state.gymWorkouts = state.gymWorkouts || [];
 state.workoutTemplates = state.workoutTemplates || [];
 state.hard75 = state.hard75 || { dayStreak: 0, lastCompletedDate: null, logs: {} };
 updateUI();
+initCloudSync();
 initToolbarSettings();
 initGymTracker();
 initWorkoutSubpages();
