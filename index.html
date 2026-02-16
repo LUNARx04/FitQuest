@@ -44,13 +44,26 @@
     </header>
 
     <nav class="nav-tabs">
-      <button class="nav-tab active" data-tab="dashboard">Dashboard</button>
-      <button class="nav-tab" data-tab="quests">Quests</button>
-      <button class="nav-tab" data-tab="gym">Gym Tracker</button>
-      <button class="nav-tab" data-tab="progress">Progress</button>
-      <button class="nav-tab" data-tab="workouts">Log Workout</button>
-      <button class="nav-tab" data-tab="hard75">75 Hard</button>
-      <button class="nav-tab" data-tab="achievements">Achievements</button>
+      <button class="nav-tab active" data-tab="dashboard">
+        <span class="nav-icon">🏠</span>
+        <span class="nav-label">Dashboard</span>
+      </button>
+      <button class="nav-tab" data-tab="quests">
+        <span class="nav-icon">✨</span>
+        <span class="nav-label">Quests</span>
+      </button>
+      <button class="nav-tab" data-tab="workout">
+        <span class="nav-icon">🏋️</span>
+        <span class="nav-label">Workout</span>
+      </button>
+      <button class="nav-tab" data-tab="hard75">
+        <span class="nav-icon">🔥</span>
+        <span class="nav-label">75 Hard</span>
+      </button>
+      <button class="nav-tab" data-tab="achievements">
+        <span class="nav-icon">🏆</span>
+        <span class="nav-label">Achievements</span>
+      </button>
     </nav>
 
     <main class="main-content">
@@ -81,40 +94,120 @@
         <div id="questsList" class="quests-grid"></div>
       </section>
 
-      <!-- Gym Tracker Tab -->
-      <section id="gym" class="tab-content">
-        <div class="gym-tracker">
-          <div class="gym-header">
-            <h2>Gym Workout</h2>
-            <div class="gym-actions">
-              <div class="rest-timer-control">
-                <label for="defaultRest">Default rest:</label>
-                <select id="defaultRest">
-                  <option value="60">60 sec</option>
-                  <option value="90" selected>90 sec</option>
-                  <option value="120">2 min</option>
-                  <option value="180">3 min</option>
+      <!-- Workout Tab -->
+      <section id="workout" class="tab-content">
+        <div class="workout-page-header">
+          <h2>Workout</h2>
+          <p>Train, log, and track progress in one place.</p>
+        </div>
+        <div class="workout-subnav">
+          <button class="workout-subtab active" data-workout-view="builder">Workout</button>
+          <button class="workout-subtab" data-workout-view="progress">Progress</button>
+          <button class="workout-subtab" data-workout-view="log">Log Workout</button>
+        </div>
+
+        <div class="workout-subpages">
+          <div class="workout-subpage active" id="workout-view-builder">
+            <div class="gym-tracker">
+              <div class="gym-header">
+                <h2>Workout</h2>
+                <div class="gym-actions">
+                  <div class="rest-timer-control">
+                    <label for="defaultRest">Default rest:</label>
+                    <select id="defaultRest">
+                      <option value="60">60 sec</option>
+                      <option value="90" selected>90 sec</option>
+                      <option value="120">2 min</option>
+                      <option value="180">3 min</option>
+                    </select>
+                  </div>
+                  <button type="button" class="btn btn-secondary" id="loadTemplateBtn">Load Template</button>
+                  <button type="button" class="btn btn-secondary" id="saveTemplateBtn" disabled>Save as Template</button>
+                  <button type="button" class="btn btn-secondary" id="addExerciseBtn">+ Add Exercise</button>
+                </div>
+              </div>
+
+              <!-- Rest Timer Overlay -->
+              <div id="restTimerOverlay" class="rest-timer-overlay hidden">
+                <div class="rest-timer-card">
+                  <div class="rest-timer-label">Rest</div>
+                  <div class="rest-timer-display" id="restTimerDisplay">1:30</div>
+                  <button type="button" class="btn btn-primary" id="restTimerSkip">Skip Rest</button>
+                </div>
+              </div>
+
+              <div id="gymExercisesList" class="gym-exercises-list"></div>
+
+              <div class="gym-footer">
+                <button type="button" class="btn btn-primary btn-large" id="finishGymWorkout" disabled>Finish Workout</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="workout-subpage" id="workout-view-progress">
+            <div class="progress-header">
+              <h2>Exercise Progress</h2>
+              <p>Track weight and reps over time for each exercise</p>
+            </div>
+            <div class="progress-controls">
+              <div class="form-group">
+                <label for="progressExerciseSelect">Select Exercise</label>
+                <select id="progressExerciseSelect"></select>
+              </div>
+              <div class="form-group">
+                <label for="progressMetric">Metric</label>
+                <select id="progressMetric">
+                  <option value="weight">Weight (kg)</option>
+                  <option value="reps">Reps</option>
+                  <option value="volume">Volume (kg × reps)</option>
                 </select>
               </div>
-              <button type="button" class="btn btn-secondary" id="loadTemplateBtn">Load Template</button>
-              <button type="button" class="btn btn-secondary" id="saveTemplateBtn" disabled>Save as Template</button>
-              <button type="button" class="btn btn-secondary" id="addExerciseBtn">+ Add Exercise</button>
+            </div>
+            <div class="chart-container">
+              <canvas id="progressChart"></canvas>
+            </div>
+            <div id="progressEmpty" class="progress-empty hidden">
+              <p>No data yet for this exercise. Complete gym workouts to see your progress.</p>
             </div>
           </div>
 
-          <!-- Rest Timer Overlay -->
-          <div id="restTimerOverlay" class="rest-timer-overlay hidden">
-            <div class="rest-timer-card">
-              <div class="rest-timer-label">Rest</div>
-              <div class="rest-timer-display" id="restTimerDisplay">1:30</div>
-              <button type="button" class="btn btn-primary" id="restTimerSkip">Skip Rest</button>
+          <div class="workout-subpage" id="workout-view-log">
+            <div class="workout-form-card">
+              <h2>Log Your Workout</h2>
+              <form id="workoutForm">
+                <div class="form-group">
+                  <label for="workoutType">Workout Type</label>
+                  <select id="workoutType">
+                    <option value="run">Running</option>
+                    <option value="walk">Walking</option>
+                    <option value="gym">Gym</option>
+                    <option value="yoga">Yoga</option>
+                    <option value="cycling">Cycling</option>
+                    <option value="swim">Swimming</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="duration">Duration (minutes)</label>
+                    <input type="number" id="duration" min="1" max="300" value="30" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="intensity">Intensity</label>
+                    <select id="intensity">
+                      <option value="light">Light</option>
+                      <option value="moderate" selected>Moderate</option>
+                      <option value="intense">Intense</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="notes">Notes (optional)</label>
+                  <input type="text" id="notes" placeholder="How did it go?">
+                </div>
+                <button type="submit" class="btn btn-primary">Complete Workout</button>
+              </form>
             </div>
-          </div>
-
-          <div id="gymExercisesList" class="gym-exercises-list"></div>
-
-          <div class="gym-footer">
-            <button type="button" class="btn btn-primary btn-large" id="finishGymWorkout" disabled>Finish Workout</button>
           </div>
         </div>
 
@@ -175,74 +268,6 @@
               <button type="button" class="btn btn-primary" id="confirmSaveTemplate">Save Template</button>
             </div>
           </div>
-        </div>
-      </section>
-
-      <!-- Progress Tab -->
-      <section id="progress" class="tab-content">
-        <div class="progress-header">
-          <h2>Exercise Progress</h2>
-          <p>Track weight and reps over time for each exercise</p>
-        </div>
-        <div class="progress-controls">
-          <div class="form-group">
-            <label for="progressExerciseSelect">Select Exercise</label>
-            <select id="progressExerciseSelect"></select>
-          </div>
-          <div class="form-group">
-            <label for="progressMetric">Metric</label>
-            <select id="progressMetric">
-              <option value="weight">Weight (kg)</option>
-              <option value="reps">Reps</option>
-              <option value="volume">Volume (kg × reps)</option>
-            </select>
-          </div>
-        </div>
-        <div class="chart-container">
-          <canvas id="progressChart"></canvas>
-        </div>
-        <div id="progressEmpty" class="progress-empty hidden">
-          <p>No data yet for this exercise. Complete gym workouts to see your progress.</p>
-        </div>
-      </section>
-
-      <!-- Log Workout Tab -->
-      <section id="workouts" class="tab-content">
-        <div class="workout-form-card">
-          <h2>Log Your Workout</h2>
-          <form id="workoutForm">
-            <div class="form-group">
-              <label for="workoutType">Workout Type</label>
-              <select id="workoutType">
-                <option value="run">Running</option>
-                <option value="walk">Walking</option>
-                <option value="gym">Gym</option>
-                <option value="yoga">Yoga</option>
-                <option value="cycling">Cycling</option>
-                <option value="swim">Swimming</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="duration">Duration (minutes)</label>
-                <input type="number" id="duration" min="1" max="300" value="30" required>
-              </div>
-              <div class="form-group">
-                <label for="intensity">Intensity</label>
-                <select id="intensity">
-                  <option value="light">Light</option>
-                  <option value="moderate" selected>Moderate</option>
-                  <option value="intense">Intense</option>
-                </select>
-              </div>
-            </div>
-            <div class="form-group">
-              <label for="notes">Notes (optional)</label>
-              <input type="text" id="notes" placeholder="How did it go?">
-            </div>
-            <button type="submit" class="btn btn-primary">Complete Workout</button>
-          </form>
         </div>
       </section>
 

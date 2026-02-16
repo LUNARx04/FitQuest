@@ -125,14 +125,90 @@ function getWorkoutIcon(type) {
 }
 
 // Tab switching
+let mainTabTransitionId = 0;
+
+function switchMainTab(nextTabId) {
+  const current = document.querySelector('.tab-content.active');
+  const next = document.getElementById(nextTabId);
+  if (!next || (current && current.id === nextTabId)) return;
+
+  const transitionId = ++mainTabTransitionId;
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.nav-tab[data-tab="${nextTabId}"]`)?.classList.add('active');
+
+  if (!current) {
+    next.classList.add('active');
+    return;
+  }
+
+  current.classList.add('leaving');
+  next.classList.add('active', 'entering');
+
+  setTimeout(() => {
+    if (transitionId !== mainTabTransitionId) return;
+    current.classList.remove('active', 'leaving');
+    next.classList.remove('entering');
+  }, 220);
+}
+
 document.querySelectorAll('.nav-tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    tab.classList.add('active');
-    document.getElementById(tab.dataset.tab).classList.add('active');
-  });
+  tab.addEventListener('click', () => switchMainTab(tab.dataset.tab));
 });
+
+let workoutSubviewTransitionId = 0;
+function setWorkoutView(view) {
+  const current = document.querySelector('.workout-subpage.active');
+  const next = document.getElementById(`workout-view-${view}`);
+  if (!next || (current && current.id === `workout-view-${view}`)) return;
+
+  const transitionId = ++workoutSubviewTransitionId;
+  document.querySelectorAll('.workout-subtab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.workout-subtab[data-workout-view="${view}"]`)?.classList.add('active');
+
+  if (!current) {
+    next.classList.add('active');
+    return;
+  }
+
+  current.classList.add('leaving');
+  next.classList.add('active', 'entering');
+  setTimeout(() => {
+    if (transitionId !== workoutSubviewTransitionId) return;
+    current.classList.remove('active', 'leaving');
+    next.classList.remove('entering');
+  }, 200);
+}
+
+function initWorkoutSubpages() {
+  document.querySelectorAll('.workout-subtab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      setWorkoutView(tab.dataset.workoutView);
+      if (tab.dataset.workoutView === 'progress') {
+        renderProgressExerciseOptions();
+        renderProgressChart();
+      }
+    });
+  });
+
+  document.querySelector('.nav-tab[data-tab="workout"]')?.addEventListener('click', () => {
+    const activeSubview = document.querySelector('.workout-subtab.active')?.dataset.workoutView || 'builder';
+    if (activeSubview === 'progress') {
+      renderProgressExerciseOptions();
+      renderProgressChart();
+    }
+  });
+}
+
+function initIOSHeaderBehavior() {
+  const app = document.getElementById('app');
+  const scroller = document.querySelector('.main-content');
+  if (!app || !scroller) return;
+  const onScroll = () => {
+    app.classList.toggle('is-scrolled', scroller.scrollTop > 8);
+  };
+  scroller.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+}
 
 // Workout form
 document.getElementById('workoutForm').addEventListener('submit', (e) => {
@@ -848,24 +924,26 @@ function renderProgressChart() {
   });
 }
 
+function renderProgressExerciseOptions() {
+  const exerciseSelect = document.getElementById('progressExerciseSelect');
+  if (!exerciseSelect) return;
+  const current = exerciseSelect.value;
+  const exercises = getUniqueExercisesFromHistory();
+  exerciseSelect.innerHTML = '<option value="">Select exercise</option>' +
+    exercises.map(ex => `<option value="${ex.id}">${ex.name}</option>`).join('');
+  if (current && exercises.some(ex => ex.id === current)) {
+    exerciseSelect.value = current;
+  }
+}
+
 function initProgressTab() {
   const exerciseSelect = document.getElementById('progressExerciseSelect');
   const metricSelect = document.getElementById('progressMetric');
   if (!exerciseSelect) return;
 
-  const exercises = getUniqueExercisesFromHistory();
-  exerciseSelect.innerHTML = '<option value="">Select exercise</option>' +
-    exercises.map(ex => `<option value="${ex.id}">${ex.name}</option>`).join('');
-
+  renderProgressExerciseOptions();
   exerciseSelect.addEventListener('change', renderProgressChart);
   metricSelect?.addEventListener('change', renderProgressChart);
-
-  document.querySelector('.nav-tab[data-tab="progress"]')?.addEventListener('click', () => {
-    const exercises = getUniqueExercisesFromHistory();
-    exerciseSelect.innerHTML = '<option value="">Select exercise</option>' +
-      exercises.map(ex => `<option value="${ex.id}">${ex.name}</option>`).join('');
-    renderProgressChart();
-  });
 }
 
 // ========== 75 HARD ==========
@@ -948,5 +1026,7 @@ state.workoutTemplates = state.workoutTemplates || [];
 state.hard75 = state.hard75 || { dayStreak: 0, lastCompletedDate: null, logs: {} };
 updateUI();
 initGymTracker();
+initWorkoutSubpages();
 initProgressTab();
 initHard75();
+initIOSHeaderBehavior();
