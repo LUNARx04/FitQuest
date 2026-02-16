@@ -286,7 +286,9 @@ function initIOSHeaderBehavior() {
   const scroller = document.querySelector('.main-content');
   if (!app || !scroller) return;
   const onScroll = () => {
-    app.classList.toggle('is-scrolled', scroller.scrollTop > 8);
+    const y = scroller.scrollTop;
+    app.classList.toggle('is-scrolled', y > 8);
+    app.classList.toggle('is-toolbar-condensed', y > 56);
   };
   scroller.addEventListener('scroll', onScroll, { passive: true });
   onScroll();
