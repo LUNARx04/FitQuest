@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#00d9a5">
+  <title>FitQuest — Level Up Your Fitness</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="ios-theme.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div id="app">
+    <header class="header">
+      <div class="logo">
+        <span class="logo-icon">⚔️</span>
+        <h1>FitQuest</h1>
+      </div>
+      <div class="player-stats">
+        <div class="stat level-badge">
+          <span class="stat-label">Level</span>
+          <span class="stat-value" id="playerLevel">1</span>
+        </div>
+        <div class="stat xp-bar-container">
+          <span class="stat-label">XP</span>
+          <div class="xp-bar">
+            <div class="xp-fill" id="xpFill"></div>
+          </div>
+          <span class="xp-text" id="xpText">0 / 100</span>
+        </div>
+        <div class="stat streak">
+          <span class="stat-label">Streak</span>
+          <span class="stat-value" id="streakCount">0</span>
+          <span class="streak-icon">🔥</span>
+        </div>
+      </div>
+    </header>
+
+    <nav class="nav-tabs">
+      <button class="nav-tab active" data-tab="dashboard">Dashboard</button>
+      <button class="nav-tab" data-tab="quests">Quests</button>
+      <button class="nav-tab" data-tab="gym">Gym Tracker</button>
+      <button class="nav-tab" data-tab="progress">Progress</button>
+      <button class="nav-tab" data-tab="workouts">Log Workout</button>
+      <button class="nav-tab" data-tab="hard75">75 Hard</button>
+      <button class="nav-tab" data-tab="achievements">Achievements</button>
+    </nav>
+
+    <main class="main-content">
+      <!-- Dashboard Tab -->
+      <section id="dashboard" class="tab-content active">
+        <div class="welcome-card">
+          <h2>Welcome, Adventurer!</h2>
+          <p>Complete quests and log workouts to earn XP and level up. Your fitness journey awaits.</p>
+        </div>
+        <div class="dashboard-grid">
+          <div class="card today-quests">
+            <h3>Today's Quests</h3>
+            <div id="todayQuestsList"></div>
+          </div>
+          <div class="card recent-activity">
+            <h3>Recent Activity</h3>
+            <div id="recentActivityList"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Quests Tab -->
+      <section id="quests" class="tab-content">
+        <div class="quests-header">
+          <h2>Active Quests</h2>
+          <p>Complete these challenges to earn XP and rewards</p>
+        </div>
+        <div id="questsList" class="quests-grid"></div>
+      </section>
+
+      <!-- Gym Tracker Tab -->
+      <section id="gym" class="tab-content">
+        <div class="gym-tracker">
+          <div class="gym-header">
+            <h2>Gym Workout</h2>
+            <div class="gym-actions">
+              <div class="rest-timer-control">
+                <label for="defaultRest">Default rest:</label>
+                <select id="defaultRest">
+                  <option value="60">60 sec</option>
+                  <option value="90" selected>90 sec</option>
+                  <option value="120">2 min</option>
+                  <option value="180">3 min</option>
+                </select>
+              </div>
+              <button type="button" class="btn btn-secondary" id="loadTemplateBtn">Load Template</button>
+              <button type="button" class="btn btn-secondary" id="saveTemplateBtn" disabled>Save as Template</button>
+              <button type="button" class="btn btn-secondary" id="addExerciseBtn">+ Add Exercise</button>
+            </div>
+          </div>
+
+          <!-- Rest Timer Overlay -->
+          <div id="restTimerOverlay" class="rest-timer-overlay hidden">
+            <div class="rest-timer-card">
+              <div class="rest-timer-label">Rest</div>
+              <div class="rest-timer-display" id="restTimerDisplay">1:30</div>
+              <button type="button" class="btn btn-primary" id="restTimerSkip">Skip Rest</button>
+            </div>
+          </div>
+
+          <div id="gymExercisesList" class="gym-exercises-list"></div>
+
+          <div class="gym-footer">
+            <button type="button" class="btn btn-primary btn-large" id="finishGymWorkout" disabled>Finish Workout</button>
+          </div>
+        </div>
+
+        <!-- Add Exercise Modal -->
+        <div id="addExerciseModal" class="modal hidden">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h3>Add Exercise</h3>
+              <button type="button" class="modal-close" id="closeExerciseModal">&times;</button>
+            </div>
+            <div class="modal-body">
+              <div class="exercise-filter">
+                <input type="text" id="exerciseSearch" placeholder="Search exercises...">
+                <select id="muscleGroupFilter">
+                  <option value="">All muscle groups</option>
+                  <option value="chest">Chest</option>
+                  <option value="back">Back</option>
+                  <option value="shoulders">Shoulders</option>
+                  <option value="biceps">Biceps</option>
+                  <option value="triceps">Triceps</option>
+                  <option value="quads">Quads</option>
+                  <option value="hamstrings">Hamstrings</option>
+                  <option value="glutes">Glutes</option>
+                  <option value="calves">Calves</option>
+                  <option value="core">Core</option>
+                </select>
+              </div>
+              <div id="exercisePickerList" class="exercise-picker-list"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Load Template Modal -->
+        <div id="loadTemplateModal" class="modal hidden">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h3>Load Workout Template</h3>
+              <button type="button" class="modal-close" id="closeLoadTemplateModal">&times;</button>
+            </div>
+            <div class="modal-body">
+              <div id="templateList" class="template-list"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Save Template Modal -->
+        <div id="saveTemplateModal" class="modal hidden">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h3>Save as Template</h3>
+              <button type="button" class="modal-close" id="closeSaveTemplateModal">&times;</button>
+            </div>
+            <div class="modal-body">
+              <div class="form-group">
+                <label for="templateName">Template Name</label>
+                <input type="text" id="templateName" placeholder="e.g. Push Day, Leg Day">
+              </div>
+              <button type="button" class="btn btn-primary" id="confirmSaveTemplate">Save Template</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Progress Tab -->
+      <section id="progress" class="tab-content">
+        <div class="progress-header">
+          <h2>Exercise Progress</h2>
+          <p>Track weight and reps over time for each exercise</p>
+        </div>
+        <div class="progress-controls">
+          <div class="form-group">
+            <label for="progressExerciseSelect">Select Exercise</label>
+            <select id="progressExerciseSelect"></select>
+          </div>
+          <div class="form-group">
+            <label for="progressMetric">Metric</label>
+            <select id="progressMetric">
+              <option value="weight">Weight (kg)</option>
+              <option value="reps">Reps</option>
+              <option value="volume">Volume (kg × reps)</option>
+            </select>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="progressChart"></canvas>
+        </div>
+        <div id="progressEmpty" class="progress-empty hidden">
+          <p>No data yet for this exercise. Complete gym workouts to see your progress.</p>
+        </div>
+      </section>
+
+      <!-- Log Workout Tab -->
+      <section id="workouts" class="tab-content">
+        <div class="workout-form-card">
+          <h2>Log Your Workout</h2>
+          <form id="workoutForm">
+            <div class="form-group">
+              <label for="workoutType">Workout Type</label>
+              <select id="workoutType">
+                <option value="run">Running</option>
+                <option value="walk">Walking</option>
+                <option value="gym">Gym</option>
+                <option value="yoga">Yoga</option>
+                <option value="cycling">Cycling</option>
+                <option value="swim">Swimming</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="duration">Duration (minutes)</label>
+                <input type="number" id="duration" min="1" max="300" value="30" required>
+              </div>
+              <div class="form-group">
+                <label for="intensity">Intensity</label>
+                <select id="intensity">
+                  <option value="light">Light</option>
+                  <option value="moderate" selected>Moderate</option>
+                  <option value="intense">Intense</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="notes">Notes (optional)</label>
+              <input type="text" id="notes" placeholder="How did it go?">
+            </div>
+            <button type="submit" class="btn btn-primary">Complete Workout</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- 75 Hard Tab -->
+      <section id="hard75" class="tab-content">
+        <div class="hard75-header">
+          <h2>75 Hard</h2>
+          <p class="hard75-desc">Mental toughness challenge — complete all 5 tasks daily for 75 consecutive days. Miss one day, start over.</p>
+          <div class="hard75-streak" id="hard75Streak">
+            <span class="streak-days" id="hard75DayCount">0</span>
+            <span class="streak-label">/ 75 days</span>
+          </div>
+        </div>
+        <div class="hard75-checklist card">
+          <h3>Today's Checklist</h3>
+          <div class="hard75-tasks" id="hard75Tasks">
+            <label class="hard75-task">
+              <input type="checkbox" id="hard75Diet" data-task="diet">
+              <span>Follow diet — no alcohol, no cheats</span>
+            </label>
+            <label class="hard75-task">
+              <input type="checkbox" id="hard75Workout1" data-task="workout1">
+              <span>Workout 1 — 45 min</span>
+            </label>
+            <label class="hard75-task">
+              <input type="checkbox" id="hard75Workout2" data-task="workout2Outdoor">
+              <span>Workout 2 — 45 min (must be outdoors)</span>
+            </label>
+            <label class="hard75-task">
+              <input type="checkbox" id="hard75Water" data-task="water">
+              <span>Drink 1 gallon of water</span>
+            </label>
+            <label class="hard75-task">
+              <input type="checkbox" id="hard75Read" data-task="read">
+              <span>Read 10 pages of non-fiction</span>
+            </label>
+            <label class="hard75-task">
+              <input type="checkbox" id="hard75Photo" data-task="photo">
+              <span>Take progress photo</span>
+            </label>
+          </div>
+          <button type="button" class="btn btn-primary" id="hard75CompleteDay">Complete Day</button>
+        </div>
+      </section>
+
+      <!-- Achievements Tab -->
+      <section id="achievements" class="tab-content">
+        <div class="achievements-header">
+          <h2>Hall of Glory</h2>
+          <p>Unlock achievements by reaching milestones</p>
+        </div>
+        <div id="achievementsList" class="achievements-grid"></div>
+      </section>
+    </main>
+  </div>
+
+  <script src="exercises.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

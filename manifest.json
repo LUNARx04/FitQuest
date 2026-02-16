@@ -1,0 +1,18 @@
+{
+  "name": "FitQuest",
+  "short_name": "FitQuest",
+  "description": "Level up your fitness — gamified workout tracker",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#00d9a5",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
