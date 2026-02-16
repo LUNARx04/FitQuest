@@ -200,6 +200,13 @@
     color: #fff;
   }
 
+  .settings-inline input[type="time"] {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    color: #fff;
+  }
+
   .account-grid input {
     background: rgba(255, 255, 255, 0.08);
     border-color: var(--glass-border);
@@ -208,6 +215,15 @@
 
   .data-action-status {
     color: rgba(235, 235, 245, 0.75);
+  }
+
+  .app-toast {
+    bottom: calc(6.2rem + env(safe-area-inset-bottom, 0));
+    background: rgba(44, 44, 46, 0.86);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: saturate(180%) blur(18px);
+    -webkit-backdrop-filter: saturate(180%) blur(18px);
+    color: rgba(255, 255, 255, 0.95);
   }
 
   /* Cards — glass material */
@@ -240,6 +256,8 @@
   .form-group input,
   .form-group select,
   .set-input,
+  .set-stepper,
+  .routine-row select,
   .exercise-filter input,
   .exercise-filter select {
     background: rgba(255, 255, 255, 0.06);

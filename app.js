@@ -9,6 +9,20 @@ const state = {
   workouts: [],
   gymWorkouts: [],
   workoutTemplates: [],
+  routineSchedule: {},
+  routineCompletions: {},
+  reminderSettings: {
+    enabled: false,
+    workoutReminderTime: '18:00',
+    restDayEnabled: true,
+    restDayReminderTime: '10:00',
+    streakRiskTime: '20:00'
+  },
+  reminderMeta: {
+    workoutSentOn: null,
+    restSentOn: null,
+    streakRiskSentOn: null
+  },
   completedQuests: [],
   hard75: {
     dayStreak: 0,
@@ -35,14 +49,34 @@ const cloudSync = {
   skipNextSaveQueue: false,
   syncTimer: null
 };
+let uiToastTimer = null;
 
 // Gym tracker state
 let gymState = {
   exercises: [],
   startTime: null,
+  activeTemplateId: null,
   restTimerInterval: null,
   restSecondsRemaining: 0
 };
+
+const ROUTINE_WEEK_DAYS = [
+  { id: 'mon', label: 'Mon', index: 1 },
+  { id: 'tue', label: 'Tue', index: 2 },
+  { id: 'wed', label: 'Wed', index: 3 },
+  { id: 'thu', label: 'Thu', index: 4 },
+  { id: 'fri', label: 'Fri', index: 5 },
+  { id: 'sat', label: 'Sat', index: 6 },
+  { id: 'sun', label: 'Sun', index: 0 }
+];
+const DEFAULT_REMINDER_SETTINGS = {
+  enabled: false,
+  workoutReminderTime: '18:00',
+  restDayEnabled: true,
+  restDayReminderTime: '10:00',
+  streakRiskTime: '20:00'
+};
+let reminderCheckInterval = null;
 
 // Quests definitions
 const QUESTS = [
@@ -103,6 +137,10 @@ function saveState() {
     workouts: state.workouts,
     gymWorkouts: state.gymWorkouts,
     workoutTemplates: state.workoutTemplates,
+    routineSchedule: state.routineSchedule,
+    routineCompletions: state.routineCompletions,
+    reminderSettings: state.reminderSettings,
+    reminderMeta: state.reminderMeta,
     completedQuests: state.completedQuests,
     hard75: state.hard75
   }));
@@ -119,6 +157,148 @@ function setDataActionStatus(message, isError = false) {
   if (!el) return;
   el.textContent = message || '';
   el.style.color = isError ? '#ef4444' : '';
+}
+
+function showToast(message) {
+  const toast = document.getElementById('appToast');
+  if (!toast) return;
+  toast.textContent = message || '';
+  toast.classList.add('visible');
+  clearTimeout(uiToastTimer);
+  uiToastTimer = setTimeout(() => {
+    toast.classList.remove('visible');
+  }, 1800);
+}
+
+function isValidTimeString(value) {
+  return typeof value === 'string' && /^\d{2}:\d{2}$/.test(value);
+}
+
+function normalizeReminderSettings(input) {
+  const settings = input && typeof input === 'object' ? input : {};
+  return {
+    enabled: !!settings.enabled,
+    workoutReminderTime: isValidTimeString(settings.workoutReminderTime) ? settings.workoutReminderTime : DEFAULT_REMINDER_SETTINGS.workoutReminderTime,
+    restDayEnabled: settings.restDayEnabled == null ? DEFAULT_REMINDER_SETTINGS.restDayEnabled : !!settings.restDayEnabled,
+    restDayReminderTime: isValidTimeString(settings.restDayReminderTime) ? settings.restDayReminderTime : DEFAULT_REMINDER_SETTINGS.restDayReminderTime,
+    streakRiskTime: isValidTimeString(settings.streakRiskTime) ? settings.streakRiskTime : DEFAULT_REMINDER_SETTINGS.streakRiskTime
+  };
+}
+
+function normalizeReminderMeta(input) {
+  const meta = input && typeof input === 'object' ? input : {};
+  return {
+    workoutSentOn: typeof meta.workoutSentOn === 'string' ? meta.workoutSentOn : null,
+    restSentOn: typeof meta.restSentOn === 'string' ? meta.restSentOn : null,
+    streakRiskSentOn: typeof meta.streakRiskSentOn === 'string' ? meta.streakRiskSentOn : null
+  };
+}
+
+function isNotificationSupported() {
+  return typeof window !== 'undefined' && 'Notification' in window;
+}
+
+function setReminderStatus(message, isError = false) {
+  const status = document.getElementById('reminderStatus');
+  if (!status) return;
+  status.textContent = message || '';
+  status.style.color = isError ? '#ef4444' : '';
+}
+
+function hasWorkoutLoggedToday() {
+  const today = new Date().toDateString();
+  return (state.workouts || []).some(w => new Date(w.date).toDateString() === today);
+}
+
+function isTodayRestDay() {
+  return !getPlannedTemplateForDate(new Date());
+}
+
+function hasReachedTimeToday(timeString) {
+  if (!isValidTimeString(timeString)) return false;
+  const [h, m] = timeString.split(':').map(Number);
+  const now = new Date();
+  const target = new Date(now);
+  target.setHours(h, m, 0, 0);
+  return now.getTime() >= target.getTime();
+}
+
+function sendReminderNotification(title, body) {
+  if (isNotificationSupported() && Notification.permission === 'granted') {
+    try {
+      new Notification(title, { body, icon: 'icon.svg' });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+async function maybeRequestNotificationPermission() {
+  if (!isNotificationSupported()) {
+    setReminderStatus('Notifications are not supported in this browser. Reminders will stay in-app only.', true);
+    return false;
+  }
+  if (Notification.permission === 'granted') return true;
+  if (Notification.permission === 'denied') {
+    setReminderStatus('Notifications are blocked. Enable them in browser settings.', true);
+    return false;
+  }
+  try {
+    const result = await Notification.requestPermission();
+    if (result === 'granted') {
+      setReminderStatus('Notifications enabled.');
+      return true;
+    }
+    setReminderStatus('Notifications not granted. Reminders will remain in-app.', true);
+    return false;
+  } catch {
+    setReminderStatus('Could not request notification permission.', true);
+    return false;
+  }
+}
+
+function evaluateReminderTriggers() {
+  const settings = normalizeReminderSettings(state.reminderSettings || {});
+  state.reminderSettings = settings;
+  state.reminderMeta = normalizeReminderMeta(state.reminderMeta || {});
+  if (!settings.enabled) return;
+
+  const todayKey = new Date().toDateString();
+  let updated = false;
+
+  if (!isTodayRestDay() && hasReachedTimeToday(settings.workoutReminderTime) && state.reminderMeta.workoutSentOn !== todayKey && !hasWorkoutLoggedToday()) {
+    const sent = sendReminderNotification('FitQuest Reminder', 'Time for your planned workout. Keep your streak alive.');
+    if (!sent) setReminderStatus('Reminder fired in-app. Enable notifications for system alerts.', true);
+    else showToast('Workout reminder sent');
+    state.reminderMeta.workoutSentOn = todayKey;
+    updated = true;
+  }
+
+  if (settings.restDayEnabled && isTodayRestDay() && hasReachedTimeToday(settings.restDayReminderTime) && state.reminderMeta.restSentOn !== todayKey) {
+    const sent = sendReminderNotification('FitQuest Rest Day', 'Today is a rest day. Recovery, mobility, and hydration still count.');
+    if (!sent) setReminderStatus('Rest-day reminder fired in-app. Enable notifications for alerts.', true);
+    else showToast('Rest-day reminder sent');
+    state.reminderMeta.restSentOn = todayKey;
+    updated = true;
+  }
+
+  if (!isTodayRestDay() && !hasWorkoutLoggedToday() && hasReachedTimeToday(settings.streakRiskTime) && state.reminderMeta.streakRiskSentOn !== todayKey) {
+    const sent = sendReminderNotification('Streak Risk Warning', 'No workout logged yet today. Log one to protect your streak.');
+    if (!sent) setReminderStatus('Streak-risk warning fired in-app. Enable notifications for alerts.', true);
+    else showToast('Streak-risk warning sent');
+    state.reminderMeta.streakRiskSentOn = todayKey;
+    updated = true;
+  }
+
+  if (updated) saveState();
+}
+
+function startReminderScheduler() {
+  if (reminderCheckInterval) clearInterval(reminderCheckInterval);
+  reminderCheckInterval = setInterval(evaluateReminderTriggers, 30000);
+  evaluateReminderTriggers();
 }
 
 function escapeCsv(value) {
@@ -146,6 +326,10 @@ function buildExportPayload() {
     workouts: state.workouts,
     gymWorkouts: state.gymWorkouts,
     workoutTemplates: state.workoutTemplates,
+    routineSchedule: state.routineSchedule,
+    routineCompletions: state.routineCompletions,
+    reminderSettings: state.reminderSettings,
+    reminderMeta: state.reminderMeta,
     completedQuests: state.completedQuests,
     hard75: state.hard75
   }));
@@ -209,7 +393,12 @@ function buildCsvExport() {
 
   sections.push('');
   sections.push('SETTINGS');
-  sections.push(toCsv(['key', 'value'], [['toolbarTabs', getSavedToolbarTabs().join('|')]]));
+  sections.push(toCsv(['key', 'value'], [
+    ['toolbarTabs', getSavedToolbarTabs().join('|')],
+    ['routineSchedule', JSON.stringify(state.routineSchedule || {})],
+    ['routineCompletions', JSON.stringify(state.routineCompletions || {})],
+    ['reminderSettings', JSON.stringify(state.reminderSettings || {})]
+  ]));
 
   return sections.join('\n');
 }
@@ -238,6 +427,10 @@ function sanitizeImportedState(raw) {
     workouts: Array.isArray(raw.workouts) ? raw.workouts : [],
     gymWorkouts: Array.isArray(raw.gymWorkouts) ? raw.gymWorkouts : [],
     workoutTemplates: Array.isArray(raw.workoutTemplates) ? raw.workoutTemplates : [],
+    routineSchedule: raw.routineSchedule && typeof raw.routineSchedule === 'object' ? raw.routineSchedule : {},
+    routineCompletions: raw.routineCompletions && typeof raw.routineCompletions === 'object' ? raw.routineCompletions : {},
+    reminderSettings: raw.reminderSettings && typeof raw.reminderSettings === 'object' ? raw.reminderSettings : {},
+    reminderMeta: raw.reminderMeta && typeof raw.reminderMeta === 'object' ? raw.reminderMeta : {},
     completedQuests: Array.isArray(raw.completedQuests) ? raw.completedQuests : [],
     hard75: raw.hard75 && typeof raw.hard75 === 'object' ? raw.hard75 : { dayStreak: 0, lastCompletedDate: null, logs: {} }
   };
@@ -247,6 +440,8 @@ function sanitizeImportedState(raw) {
     lastCompletedDate: typeof safe.hard75.lastCompletedDate === 'string' ? safe.hard75.lastCompletedDate : null,
     logs: safe.hard75.logs && typeof safe.hard75.logs === 'object' ? safe.hard75.logs : {}
   };
+  safe.reminderSettings = normalizeReminderSettings(safe.reminderSettings);
+  safe.reminderMeta = normalizeReminderMeta(safe.reminderMeta);
 
   return safe;
 }
@@ -274,6 +469,10 @@ function applyImportedData(importedState, importedToolbarTabs, mode) {
     state.workouts = mergeById(state.workouts, importedState.workouts);
     state.gymWorkouts = mergeById(state.gymWorkouts, importedState.gymWorkouts);
     state.workoutTemplates = mergeById(state.workoutTemplates, importedState.workoutTemplates);
+    state.routineSchedule = { ...(state.routineSchedule || {}), ...(importedState.routineSchedule || {}) };
+    state.routineCompletions = { ...(state.routineCompletions || {}), ...(importedState.routineCompletions || {}) };
+    state.reminderSettings = normalizeReminderSettings({ ...(state.reminderSettings || {}), ...(importedState.reminderSettings || {}) });
+    state.reminderMeta = normalizeReminderMeta({ ...(state.reminderMeta || {}), ...(importedState.reminderMeta || {}) });
     state.completedQuests = [...new Set([...(state.completedQuests || []), ...(importedState.completedQuests || [])])];
     state.hard75 = {
       dayStreak: Math.max(state.hard75?.dayStreak || 0, importedState.hard75?.dayStreak || 0),
@@ -289,6 +488,10 @@ function applyImportedData(importedState, importedToolbarTabs, mode) {
     state.workouts = importedState.workouts;
     state.gymWorkouts = importedState.gymWorkouts;
     state.workoutTemplates = importedState.workoutTemplates;
+    state.routineSchedule = importedState.routineSchedule || {};
+    state.routineCompletions = importedState.routineCompletions || {};
+    state.reminderSettings = normalizeReminderSettings(importedState.reminderSettings || {});
+    state.reminderMeta = normalizeReminderMeta(importedState.reminderMeta || {});
     state.completedQuests = importedState.completedQuests;
     state.hard75 = importedState.hard75;
   }
@@ -301,9 +504,12 @@ function applyImportedData(importedState, importedToolbarTabs, mode) {
   applyToolbarTabs(getSavedToolbarTabs());
   gymState.exercises = [];
   gymState.startTime = null;
+  gymState.activeTemplateId = null;
   renderGymExercises();
   updateUI();
   renderProgressExerciseOptions();
+  renderRoutinePlanner();
+  evaluateReminderTriggers();
 }
 
 function hasMeaningfulStateData(inputState) {
@@ -312,6 +518,8 @@ function hasMeaningfulStateData(inputState) {
     (inputState.workouts && inputState.workouts.length > 0) ||
     (inputState.gymWorkouts && inputState.gymWorkouts.length > 0) ||
     (inputState.workoutTemplates && inputState.workoutTemplates.length > 0) ||
+    Object.keys(inputState.routineSchedule || {}).length > 0 ||
+    Object.keys(inputState.routineCompletions || {}).length > 0 ||
     (inputState.completedQuests && inputState.completedQuests.length > 0) ||
     ((inputState.hard75 && inputState.hard75.dayStreak) || 0) > 0
   );
@@ -587,13 +795,39 @@ function initToolbarSettings() {
   const syncNowBtn = document.getElementById('syncNowBtn');
   const authEmail = document.getElementById('authEmail');
   const authPassword = document.getElementById('authPassword');
+  const remindersEnabled = document.getElementById('remindersEnabled');
+  const workoutReminderTime = document.getElementById('workoutReminderTime');
+  const restDayRemindersEnabled = document.getElementById('restDayRemindersEnabled');
+  const restDayReminderTime = document.getElementById('restDayReminderTime');
+  const streakRiskTime = document.getElementById('streakRiskTime');
   const modal = document.getElementById('toolbarSettingsModal');
-  if (!openBtn || !closeBtn || !saveBtn || !modal || !exportJsonBtn || !exportCsvBtn || !importJsonBtn || !importInput || !importMode || !signUpBtn || !signInBtn || !signOutBtn || !syncNowBtn || !authEmail || !authPassword) return;
+  if (!openBtn || !closeBtn || !saveBtn || !modal || !exportJsonBtn || !exportCsvBtn || !importJsonBtn || !importInput || !importMode || !signUpBtn || !signInBtn || !signOutBtn || !syncNowBtn || !authEmail || !authPassword || !remindersEnabled || !workoutReminderTime || !restDayRemindersEnabled || !restDayReminderTime || !streakRiskTime) return;
 
   applyToolbarTabs(getSavedToolbarTabs());
+  state.reminderSettings = normalizeReminderSettings(state.reminderSettings || {});
+  state.reminderMeta = normalizeReminderMeta(state.reminderMeta || {});
+
+  function syncReminderControlsFromState() {
+    const s = normalizeReminderSettings(state.reminderSettings || {});
+    remindersEnabled.checked = !!s.enabled;
+    workoutReminderTime.value = s.workoutReminderTime;
+    restDayRemindersEnabled.checked = !!s.restDayEnabled;
+    restDayReminderTime.value = s.restDayReminderTime;
+    streakRiskTime.value = s.streakRiskTime;
+  }
+
+  syncReminderControlsFromState();
+  if (!isNotificationSupported()) {
+    setReminderStatus('Notifications are not supported in this browser. Reminders will stay in-app only.', true);
+  } else if (Notification.permission === 'denied') {
+    setReminderStatus('Notifications are blocked. Enable them in browser settings.', true);
+  } else {
+    setReminderStatus('Configure reminder times and keep FitQuest open to receive them.');
+  }
 
   openBtn.addEventListener('click', () => {
     renderToolbarOptions(getSavedToolbarTabs());
+    syncReminderControlsFromState();
     modal.classList.remove('hidden');
   });
 
@@ -714,6 +948,40 @@ function initToolbarSettings() {
     }
     queueCloudSync();
     await flushCloudSyncQueue();
+  });
+
+  remindersEnabled.addEventListener('change', async () => {
+    state.reminderSettings.enabled = remindersEnabled.checked;
+    if (remindersEnabled.checked) await maybeRequestNotificationPermission();
+    saveState();
+    evaluateReminderTriggers();
+  });
+
+  workoutReminderTime.addEventListener('change', () => {
+    if (!isValidTimeString(workoutReminderTime.value)) return;
+    state.reminderSettings.workoutReminderTime = workoutReminderTime.value;
+    saveState();
+    evaluateReminderTriggers();
+  });
+
+  restDayRemindersEnabled.addEventListener('change', () => {
+    state.reminderSettings.restDayEnabled = restDayRemindersEnabled.checked;
+    saveState();
+    evaluateReminderTriggers();
+  });
+
+  restDayReminderTime.addEventListener('change', () => {
+    if (!isValidTimeString(restDayReminderTime.value)) return;
+    state.reminderSettings.restDayReminderTime = restDayReminderTime.value;
+    saveState();
+    evaluateReminderTriggers();
+  });
+
+  streakRiskTime.addEventListener('change', () => {
+    if (!isValidTimeString(streakRiskTime.value)) return;
+    state.reminderSettings.streakRiskTime = streakRiskTime.value;
+    saveState();
+    evaluateReminderTriggers();
   });
 }
 
@@ -857,7 +1125,137 @@ function updateUI() {
   renderQuests();
   renderAchievements();
   renderHard75();
+  renderTodayPlannedWorkout();
+  renderRoutinePlanner();
   updateSaveTemplateButton();
+  updateRepeatLastWorkoutButtons();
+}
+
+function getDateKey(date = new Date()) {
+  return new Date(date).toDateString();
+}
+
+function getRoutineDayIdByDate(date = new Date()) {
+  const dayIndex = new Date(date).getDay();
+  const day = ROUTINE_WEEK_DAYS.find(d => d.index === dayIndex);
+  return day ? day.id : 'mon';
+}
+
+function getCurrentWeekDateByDayIndex(targetDayIndex) {
+  const today = new Date();
+  const monday = new Date(today);
+  const diffToMonday = (today.getDay() + 6) % 7;
+  monday.setDate(today.getDate() - diffToMonday);
+  const out = new Date(monday);
+  const dayOffset = targetDayIndex === 0 ? 6 : targetDayIndex - 1;
+  out.setDate(monday.getDate() + dayOffset);
+  return out;
+}
+
+function getTemplateById(templateId) {
+  return (state.workoutTemplates || []).find(t => String(t.id) === String(templateId)) || null;
+}
+
+function getPlannedTemplateForDate(date = new Date()) {
+  const dayId = getRoutineDayIdByDate(date);
+  const templateId = state.routineSchedule?.[dayId];
+  if (!templateId) return null;
+  return getTemplateById(templateId);
+}
+
+function isRoutineCompletedForDate(date = new Date(), expectedTemplateId = null) {
+  const key = getDateKey(date);
+  const completion = state.routineCompletions?.[key];
+  if (!completion) return false;
+  if (expectedTemplateId == null) return true;
+  return String(completion.templateId) === String(expectedTemplateId);
+}
+
+function renderTodayPlannedWorkout() {
+  const container = document.getElementById('todaysPlannedWorkout');
+  if (!container) return;
+  const todayTemplate = getPlannedTemplateForDate(new Date());
+  if (!todayTemplate) {
+    container.innerHTML = `<p class="today-plan-empty">No workout planned for today.</p>`;
+    return;
+  }
+  const completed = isRoutineCompletedForDate(new Date(), todayTemplate.id);
+  container.innerHTML = `
+    <div class="today-plan-item">
+      <div>
+        <div class="today-plan-title">${todayTemplate.name}</div>
+        <div class="today-plan-meta">${(todayTemplate.exercises || []).length} exercises</div>
+      </div>
+      <span class="plan-status ${completed ? 'complete' : 'pending'}">${completed ? 'Complete' : 'Planned'}</span>
+    </div>
+  `;
+}
+
+function renderRoutinePlanner() {
+  const container = document.getElementById('routinePlannerList');
+  if (!container) return;
+
+  const templates = state.workoutTemplates || [];
+  container.innerHTML = ROUTINE_WEEK_DAYS.map(day => {
+    const assignedTemplateId = state.routineSchedule?.[day.id] || '';
+    const assignedTemplate = assignedTemplateId ? getTemplateById(assignedTemplateId) : null;
+    const weekDate = getCurrentWeekDateByDayIndex(day.index);
+    const complete = assignedTemplate ? isRoutineCompletedForDate(weekDate, assignedTemplateId) : false;
+    const statusText = assignedTemplate ? (complete ? 'Complete' : 'Pending') : 'Unassigned';
+    const statusClass = assignedTemplate ? (complete ? 'complete' : 'pending') : '';
+    return `
+      <div class="routine-row">
+        <span class="routine-day">${day.label}</span>
+        <select data-routine-day="${day.id}">
+          <option value="">No template</option>
+          ${templates.map(t => `<option value="${t.id}" ${String(assignedTemplateId) === String(t.id) ? 'selected' : ''}>${t.name}</option>`).join('')}
+        </select>
+        <span class="plan-status ${statusClass}">${statusText}</span>
+      </div>
+    `;
+  }).join('');
+
+  container.querySelectorAll('select[data-routine-day]').forEach(select => {
+    select.addEventListener('change', (e) => {
+      const dayId = e.target.dataset.routineDay;
+      const templateId = e.target.value || null;
+      if (!state.routineSchedule || typeof state.routineSchedule !== 'object') state.routineSchedule = {};
+      if (!templateId) delete state.routineSchedule[dayId];
+      else state.routineSchedule[dayId] = templateId;
+      saveState();
+      renderRoutinePlanner();
+      renderTodayPlannedWorkout();
+    });
+  });
+}
+
+function doesWorkoutMatchTemplate(workoutExercises, templateExercises) {
+  const workoutIds = (workoutExercises || []).map(ex => String(ex.id || ''));
+  const templateIds = (templateExercises || []).map(ex => String(ex.id || ''));
+  if (!workoutIds.length || workoutIds.length !== templateIds.length) return false;
+  return workoutIds.every((id, idx) => id === templateIds[idx]);
+}
+
+function markRoutineCompletionIfMatched(gymWorkout, activeTemplateId) {
+  const today = new Date();
+  const dayId = getRoutineDayIdByDate(today);
+  const plannedTemplateId = state.routineSchedule?.[dayId];
+  if (!plannedTemplateId) return false;
+
+  const plannedTemplate = getTemplateById(plannedTemplateId);
+  if (!plannedTemplate) return false;
+
+  const matchedByActiveTemplate = activeTemplateId && String(activeTemplateId) === String(plannedTemplateId);
+  const matchedByStructure = doesWorkoutMatchTemplate(gymWorkout.exercises || [], plannedTemplate.exercises || []);
+  if (!matchedByActiveTemplate && !matchedByStructure) return false;
+
+  state.routineCompletions = state.routineCompletions || {};
+  state.routineCompletions[getDateKey(today)] = {
+    templateId: plannedTemplateId,
+    workoutId: gymWorkout.id,
+    completedAt: new Date().toISOString()
+  };
+  return true;
 }
 
 function renderTodayQuests() {
@@ -992,12 +1390,170 @@ function getDefaultRestSeconds() {
   return parseInt(document.getElementById('defaultRest')?.value || 90);
 }
 
+function getExerciseRestSeconds(exercise) {
+  const value = Number(exercise?.restPresetSeconds);
+  if (Number.isFinite(value) && value > 0) return Math.floor(value);
+  return getDefaultRestSeconds();
+}
+
+function getMostRecentGymWorkout() {
+  const workouts = state.gymWorkouts || [];
+  if (!workouts.length) return null;
+  const toTimestamp = (value) => {
+    const parsed = Date.parse(value || 0);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  return workouts.reduce((latest, current) => {
+    if (!latest) return current;
+    const latestTime = toTimestamp(latest.date);
+    const currentTime = toTimestamp(current.date);
+    return currentTime > latestTime ? current : latest;
+  }, null);
+}
+
+function cloneWorkoutExercises(exercises) {
+  return (exercises || []).map(ex => ({
+    id: ex.id,
+    name: ex.name,
+    muscle: ex.muscle,
+    restPresetSeconds: Number.isFinite(Number(ex.restPresetSeconds))
+      ? Math.floor(Number(ex.restPresetSeconds))
+      : null,
+    sets: (ex.sets || [{ reps: '', weight: '' }]).map(set => ({
+      reps: set.reps ?? '',
+      weight: set.weight ?? ''
+    }))
+  }));
+}
+
+function getExerciseRecentSessions(exerciseId, limit = 3) {
+  return (state.gymWorkouts || [])
+    .filter(w => Array.isArray(w.exercises) && w.exercises.some(ex => String(ex.id) === String(exerciseId)))
+    .sort((a, b) => Date.parse(b.date || 0) - Date.parse(a.date || 0))
+    .slice(0, limit)
+    .map(workout => workout.exercises.find(ex => String(ex.id) === String(exerciseId)))
+    .filter(Boolean)
+    .map(ex => ({
+      id: ex.id,
+      name: ex.name,
+      sets: (ex.sets || []).map(set => ({
+        reps: Number.parseFloat(set.reps) || 0,
+        weight: Number.parseFloat(set.weight) || 0
+      }))
+    }));
+}
+
+function getSetValueFromSession(session, setIndex) {
+  const direct = session.sets?.[setIndex];
+  const hasDirect = direct && (direct.reps > 0 || direct.weight > 0);
+  if (hasDirect) return direct;
+
+  const fallbackSets = (session.sets || []).filter(s => (s.reps > 0 || s.weight > 0));
+  if (!fallbackSets.length) return null;
+  return fallbackSets[fallbackSets.length - 1];
+}
+
+function getWeightStep(weight) {
+  if (weight >= 100) return 2.5;
+  if (weight >= 50) return 1.25;
+  if (weight >= 20) return 1;
+  return 0.5;
+}
+
+function roundToWeightStep(weight, step) {
+  const rounded = Math.round(weight / step) * step;
+  return Number(rounded.toFixed(2));
+}
+
+function getSetSuggestionForExercise(exercise, setIndex) {
+  const sessions = getExerciseRecentSessions(exercise.id, 3);
+  if (sessions.length < 2) return null;
+
+  const values = sessions
+    .map(session => getSetValueFromSession(session, setIndex))
+    .filter(Boolean);
+  if (values.length < 2) return null;
+
+  const latest = values[0];
+  const previous = values.slice(1);
+  const avgPrevReps = previous.reduce((sum, v) => sum + (v.reps || 0), 0) / previous.length;
+  const avgPrevWeight = previous.reduce((sum, v) => sum + (v.weight || 0), 0) / previous.length;
+
+  const latestReps = Number.isFinite(latest.reps) ? latest.reps : 0;
+  const latestWeight = Number.isFinite(latest.weight) ? latest.weight : 0;
+  const performative = latestReps >= 8 && latestReps >= avgPrevReps && latestWeight >= avgPrevWeight;
+
+  let suggestedWeight = latestWeight;
+  let suggestedReps = latestReps || Math.max(6, Math.round(avgPrevReps || 8));
+  let reason = 'repeat';
+
+  if (performative && latestWeight > 0) {
+    const step = getWeightStep(latestWeight);
+    suggestedWeight = roundToWeightStep(latestWeight + step, step);
+    suggestedReps = Math.max(6, Math.round(latestReps - 1));
+    reason = 'weight-up';
+  } else {
+    suggestedWeight = latestWeight > 0 ? latestWeight : Number(avgPrevWeight.toFixed(2));
+    suggestedReps = Math.min(15, Math.max(1, Math.round((latestReps || avgPrevReps || 0) + 1)));
+    reason = 'reps-up';
+  }
+
+  // Guardrail to avoid extreme jumps from noisy data.
+  const maxAllowedWeight = latestWeight > 0 ? latestWeight + Math.max(2.5, getWeightStep(latestWeight) * 2) : suggestedWeight;
+  suggestedWeight = Math.min(suggestedWeight, maxAllowedWeight);
+
+  if (!Number.isFinite(suggestedReps) || suggestedReps <= 0) return null;
+  if (!Number.isFinite(suggestedWeight) || suggestedWeight < 0) suggestedWeight = 0;
+
+  return {
+    reps: Math.round(suggestedReps),
+    weight: Number(suggestedWeight.toFixed(2)),
+    reason
+  };
+}
+
+function applySetSuggestion(exerciseIndex, setIndex) {
+  const exercise = gymState.exercises[exerciseIndex];
+  if (!exercise) return;
+  const suggestion = getSetSuggestionForExercise(exercise, setIndex);
+  if (!suggestion) return;
+  updateSet(exerciseIndex, setIndex, 'reps', String(suggestion.reps));
+  updateSet(exerciseIndex, setIndex, 'weight', String(suggestion.weight));
+}
+
+function updateRepeatLastWorkoutButtons() {
+  const hasRepeatSource = !!getMostRecentGymWorkout();
+  document.querySelectorAll('.repeat-last-workout-btn').forEach(btn => {
+    btn.disabled = !hasRepeatSource;
+  });
+}
+
+function repeatLastWorkout() {
+  const lastWorkout = getMostRecentGymWorkout();
+  if (!lastWorkout || !Array.isArray(lastWorkout.exercises) || lastWorkout.exercises.length === 0) {
+    alert('No previous gym workout found yet.');
+    return;
+  }
+
+  gymState.exercises = cloneWorkoutExercises(lastWorkout.exercises);
+  gymState.startTime = new Date();
+  gymState.activeTemplateId = lastWorkout.templateId || null;
+  renderGymExercises();
+  updateSaveTemplateButton();
+  document.getElementById('finishGymWorkout').disabled = false;
+  switchMainTab('workout');
+  setWorkoutView('builder');
+  showToast(`Loaded last workout (${lastWorkout.exercises.length} exercises)`);
+}
+
 function addExerciseToWorkout(exercise) {
   if (!gymState.startTime) gymState.startTime = new Date();
+  gymState.activeTemplateId = null;
   gymState.exercises.push({
     id: exercise.id,
     name: exercise.name,
     muscle: exercise.muscle,
+    restPresetSeconds: null,
     sets: [{ reps: '', weight: '' }]
   });
   renderGymExercises();
@@ -1007,6 +1563,7 @@ function addExerciseToWorkout(exercise) {
 }
 
 function removeExerciseFromWorkout(index) {
+  gymState.activeTemplateId = null;
   gymState.exercises.splice(index, 1);
   renderGymExercises();
   updateSaveTemplateButton();
@@ -1030,11 +1587,51 @@ function updateSet(exerciseIndex, setIndex, field, value) {
   gymState.exercises[exerciseIndex].sets[setIndex][field] = value;
 }
 
-function startRestTimer(callback) {
+function nudgeSetValue(exerciseIndex, setIndex, field, delta) {
+  const set = gymState.exercises[exerciseIndex]?.sets?.[setIndex];
+  if (!set) return;
+
+  const current = Number.parseFloat(set[field]);
+  const parsedDelta = Number(delta);
+  const min = field === 'reps' ? 1 : 0;
+  const step = field === 'reps' ? 1 : 0.5;
+  const normalizedCurrent = Number.isFinite(current) ? current : 0;
+  let next = normalizedCurrent + parsedDelta;
+
+  if (field === 'reps') {
+    next = Math.round(next);
+  } else {
+    next = Math.round(next / step) * step;
+  }
+  next = Math.max(min, next);
+
+  const formatted = field === 'reps'
+    ? String(Math.floor(next))
+    : String(Number(next.toFixed(2)));
+  updateSet(exerciseIndex, setIndex, field, formatted);
+}
+
+function updateExerciseRestPreset(exerciseIndex, value) {
+  const parsed = Number(value);
+  if (value === '' || value === 'default') {
+    gymState.exercises[exerciseIndex].restPresetSeconds = null;
+    return;
+  }
+  if (Number.isFinite(parsed) && parsed > 0) {
+    gymState.exercises[exerciseIndex].restPresetSeconds = Math.floor(parsed);
+  } else {
+    gymState.exercises[exerciseIndex].restPresetSeconds = null;
+  }
+}
+
+function startRestTimer(secondsOverride, callback) {
   if (gymState.restTimerInterval) {
     clearInterval(gymState.restTimerInterval);
   }
-  gymState.restSecondsRemaining = getDefaultRestSeconds();
+  const candidate = Number(secondsOverride);
+  gymState.restSecondsRemaining = Number.isFinite(candidate) && candidate > 0
+    ? Math.floor(candidate)
+    : getDefaultRestSeconds();
   const overlay = document.getElementById('restTimerOverlay');
   overlay.classList.remove('hidden');
 
@@ -1084,6 +1681,26 @@ function renderGymExercises() {
       <div class="gym-exercise-header">
         <h4>${ex.name}</h4>
         <span class="gym-exercise-muscle">${ex.muscle}</span>
+        <div class="exercise-rest-control">
+          <label>Rest</label>
+          <select class="exercise-rest-preset" data-ex="${exIdx}">
+            <option value="default" ${!ex.restPresetSeconds ? 'selected' : ''}>Default</option>
+            <option value="60" ${ex.restPresetSeconds === 60 ? 'selected' : ''}>60s</option>
+            <option value="90" ${ex.restPresetSeconds === 90 ? 'selected' : ''}>90s</option>
+            <option value="120" ${ex.restPresetSeconds === 120 ? 'selected' : ''}>120s</option>
+            <option value="180" ${ex.restPresetSeconds === 180 ? 'selected' : ''}>180s</option>
+            <option value="custom" ${(ex.restPresetSeconds && ![60, 90, 120, 180].includes(ex.restPresetSeconds)) ? 'selected' : ''}>Custom</option>
+          </select>
+          <input
+            type="number"
+            class="exercise-rest-custom ${(!ex.restPresetSeconds || [60, 90, 120, 180].includes(ex.restPresetSeconds)) ? 'hidden' : ''}"
+            data-ex="${exIdx}"
+            min="5"
+            step="5"
+            placeholder="sec"
+            value="${(ex.restPresetSeconds && ![60, 90, 120, 180].includes(ex.restPresetSeconds)) ? ex.restPresetSeconds : ''}"
+          >
+        </div>
         <button type="button" class="btn-icon btn-remove-exercise" data-index="${exIdx}" title="Remove exercise">&times;</button>
       </div>
       <div class="gym-sets-table">
@@ -1094,17 +1711,35 @@ function renderGymExercises() {
           <span></span>
         </div>
         ${ex.sets.map((set, setIdx) => `
+          ${(() => {
+            const suggestion = getSetSuggestionForExercise(ex, setIdx);
+            const suggestionText = suggestion
+              ? `${suggestion.weight}kg × ${suggestion.reps}`
+              : '';
+            return `
           <div class="gym-set-row">
             <span class="set-number">${setIdx + 1}</span>
-            <input type="number" class="set-input reps-input" placeholder="—" min="1" max="999"
-              value="${set.reps || ''}" data-ex="${exIdx}" data-set="${setIdx}" data-field="reps">
-            <input type="number" class="set-input weight-input" placeholder="—" min="0" step="0.5"
-              value="${set.weight || ''}" data-ex="${exIdx}" data-set="${setIdx}" data-field="weight">
+            <div class="set-input-control">
+              <button type="button" class="set-stepper" data-ex="${exIdx}" data-set="${setIdx}" data-field="reps" data-delta="-1" title="Decrease reps">−</button>
+              <input type="number" class="set-input reps-input" placeholder="—" min="1" max="999"
+                value="${set.reps || ''}" data-ex="${exIdx}" data-set="${setIdx}" data-field="reps">
+              <button type="button" class="set-stepper" data-ex="${exIdx}" data-set="${setIdx}" data-field="reps" data-delta="1" title="Increase reps">+</button>
+            </div>
+            <div class="set-input-control">
+              <button type="button" class="set-stepper" data-ex="${exIdx}" data-set="${setIdx}" data-field="weight" data-delta="-0.5" title="Decrease weight">−</button>
+              <input type="number" class="set-input weight-input" placeholder="—" min="0" step="0.5"
+                value="${set.weight || ''}" data-ex="${exIdx}" data-set="${setIdx}" data-field="weight">
+              <button type="button" class="set-stepper" data-ex="${exIdx}" data-set="${setIdx}" data-field="weight" data-delta="0.5" title="Increase weight">+</button>
+            </div>
             <div class="set-actions">
+              ${suggestion ? `<span class="set-suggestion-badge" title="Suggested next target">${suggestionText}</span>` : ''}
+              ${suggestion ? `<button type="button" class="btn-apply-suggestion" data-ex="${exIdx}" data-set="${setIdx}" title="Apply suggestion">Apply</button>` : ''}
               <button type="button" class="btn-rest" data-ex="${exIdx}" data-set="${setIdx}" title="Start rest timer">⏱</button>
               <button type="button" class="btn-remove-set ${ex.sets.length <= 1 ? 'hidden' : ''}" data-ex="${exIdx}" data-set="${setIdx}" title="Remove set">&times;</button>
             </div>
           </div>
+        `;
+          })()}
         `).join('')}
         <button type="button" class="btn-add-set" data-ex="${exIdx}">+ Add Set</button>
       </div>
@@ -1121,6 +1756,30 @@ function renderGymExercises() {
     });
   });
 
+  container.querySelectorAll('.set-stepper').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const ex = parseInt(e.currentTarget.dataset.ex);
+      const set = parseInt(e.currentTarget.dataset.set);
+      const field = e.currentTarget.dataset.field;
+      const delta = parseFloat(e.currentTarget.dataset.delta);
+      nudgeSetValue(ex, set, field, delta);
+      const input = container.querySelector(`.set-input[data-ex="${ex}"][data-set="${set}"][data-field="${field}"]`);
+      if (input) input.value = gymState.exercises[ex].sets[set][field];
+    });
+  });
+
+  container.querySelectorAll('.btn-apply-suggestion').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const ex = parseInt(e.currentTarget.dataset.ex);
+      const set = parseInt(e.currentTarget.dataset.set);
+      applySetSuggestion(ex, set);
+      const repsInput = container.querySelector(`.set-input[data-ex="${ex}"][data-set="${set}"][data-field="reps"]`);
+      const weightInput = container.querySelector(`.set-input[data-ex="${ex}"][data-set="${set}"][data-field="weight"]`);
+      if (repsInput) repsInput.value = gymState.exercises[ex].sets[set].reps;
+      if (weightInput) weightInput.value = gymState.exercises[ex].sets[set].weight;
+    });
+  });
+
   container.querySelectorAll('.btn-rest').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1129,8 +1788,33 @@ function renderGymExercises() {
       const reps = gymState.exercises[exIdx].sets[setIdx].reps;
       const weight = gymState.exercises[exIdx].sets[setIdx].weight;
       if (reps || weight) {
-        startRestTimer();
+        const restSeconds = getExerciseRestSeconds(gymState.exercises[exIdx]);
+        startRestTimer(restSeconds);
       }
+    });
+  });
+
+  container.querySelectorAll('.exercise-rest-preset').forEach(select => {
+    select.addEventListener('change', (e) => {
+      const exIdx = parseInt(e.target.dataset.ex);
+      if (e.target.value === 'default') {
+        updateExerciseRestPreset(exIdx, 'default');
+      } else if (e.target.value === 'custom') {
+        const customInput = container.querySelector(`.exercise-rest-custom[data-ex="${exIdx}"]`);
+        customInput?.classList.remove('hidden');
+        if (!customInput?.value) customInput.value = '75';
+        updateExerciseRestPreset(exIdx, customInput?.value || 75);
+      } else {
+        updateExerciseRestPreset(exIdx, e.target.value);
+      }
+      renderGymExercises();
+    });
+  });
+
+  container.querySelectorAll('.exercise-rest-custom').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const exIdx = parseInt(e.target.dataset.ex);
+      updateExerciseRestPreset(exIdx, e.target.value);
     });
   });
 
@@ -1212,16 +1896,20 @@ function finishGymWorkout() {
   const gymWorkout = {
     id: Date.now(),
     type: 'gym',
+    templateId: gymState.activeTemplateId ?? null,
     duration: durationMin,
     exercises: gymState.exercises.map(ex => ({
       id: ex.id,
       name: ex.name,
       muscle: ex.muscle,
+      restPresetSeconds: ex.restPresetSeconds ?? null,
       sets: ex.sets.map(s => ({ reps: s.reps, weight: s.weight }))
     })),
     xp,
     date: new Date().toISOString()
   };
+
+  const routineCompleted = markRoutineCompletionIfMatched(gymWorkout, gymState.activeTemplateId);
 
   state.gymWorkouts.unshift(gymWorkout);
   state.workouts.unshift({
@@ -1236,6 +1924,7 @@ function finishGymWorkout() {
 
   gymState.exercises = [];
   gymState.startTime = null;
+  gymState.activeTemplateId = null;
   renderGymExercises();
   document.getElementById('finishGymWorkout').disabled = true;
 
@@ -1243,6 +1932,7 @@ function finishGymWorkout() {
   addXP(xp);
   checkQuests({ type: 'gym', duration: durationMin });
   saveState();
+  if (routineCompleted) showToast('Today\'s planned workout marked complete');
 
   document.querySelector('.nav-tab[data-tab="dashboard"]').click();
 }
@@ -1264,6 +1954,9 @@ function initGymTracker() {
     document.getElementById('saveTemplateModal').classList.add('hidden');
   });
   document.getElementById('confirmSaveTemplate').addEventListener('click', saveWorkoutTemplate);
+  document.querySelectorAll('.repeat-last-workout-btn').forEach(btn => {
+    btn.addEventListener('click', repeatLastWorkout);
+  });
 
   document.getElementById('exerciseSearch')?.addEventListener('input', renderExercisePicker);
   document.getElementById('muscleGroupFilter')?.addEventListener('change', renderExercisePicker);
@@ -1330,16 +2023,34 @@ function loadTemplate(index) {
     id: ex.id,
     name: ex.name,
     muscle: ex.muscle,
+    restPresetSeconds: Number.isFinite(Number(ex.restPresetSeconds)) ? Math.floor(Number(ex.restPresetSeconds)) : null,
     sets: (ex.sets || [{ reps: '', weight: '' }]).map(s => ({ reps: s.reps || '', weight: s.weight || '' }))
   }));
   gymState.startTime = new Date();
+  gymState.activeTemplateId = t.id;
   renderGymExercises();
   document.getElementById('finishGymWorkout').disabled = false;
 }
 
 function deleteTemplate(index) {
+  const deleted = state.workoutTemplates[index];
   state.workoutTemplates.splice(index, 1);
+  if (deleted?.id != null) {
+    const deletedId = String(deleted.id);
+    Object.keys(state.routineSchedule || {}).forEach(dayId => {
+      if (String(state.routineSchedule[dayId]) === deletedId) {
+        delete state.routineSchedule[dayId];
+      }
+    });
+    Object.keys(state.routineCompletions || {}).forEach(dateKey => {
+      if (String(state.routineCompletions[dateKey]?.templateId) === deletedId) {
+        delete state.routineCompletions[dateKey];
+      }
+    });
+  }
   saveState();
+  renderRoutinePlanner();
+  renderTodayPlannedWorkout();
 }
 
 function openSaveTemplateModal() {
@@ -1358,12 +2069,15 @@ function saveWorkoutTemplate() {
       id: ex.id,
       name: ex.name,
       muscle: ex.muscle,
+      restPresetSeconds: ex.restPresetSeconds ?? null,
       sets: ex.sets.map(s => ({ reps: s.reps, weight: s.weight }))
     }))
   };
   state.workoutTemplates = state.workoutTemplates || [];
   state.workoutTemplates.push(template);
   saveState();
+  renderRoutinePlanner();
+  renderTodayPlannedWorkout();
   document.getElementById('saveTemplateModal').classList.add('hidden');
 }
 
@@ -1577,6 +2291,14 @@ function initHard75() {
   document.getElementById('hard75CompleteDay')?.addEventListener('click', completeHard75Day);
 }
 
+function initReminderSystem() {
+  startReminderScheduler();
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) evaluateReminderTriggers();
+  });
+  window.addEventListener('online', () => evaluateReminderTriggers());
+}
+
 // Register Service Worker for PWA
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
@@ -1587,10 +2309,15 @@ loadState();
 state.xpToNextLevel = state.xpToNextLevel || xpForLevel(state.level);
 state.gymWorkouts = state.gymWorkouts || [];
 state.workoutTemplates = state.workoutTemplates || [];
+state.routineSchedule = state.routineSchedule || {};
+state.routineCompletions = state.routineCompletions || {};
+state.reminderSettings = normalizeReminderSettings(state.reminderSettings || {});
+state.reminderMeta = normalizeReminderMeta(state.reminderMeta || {});
 state.hard75 = state.hard75 || { dayStreak: 0, lastCompletedDate: null, logs: {} };
 updateUI();
 initCloudSync();
 initToolbarSettings();
+initReminderSystem();
 initGymTracker();
 initWorkoutSubpages();
 initProgressTab();

@@ -97,6 +97,31 @@
           </div>
 
           <div class="settings-divider"></div>
+          <h4 class="settings-title">Reminders & Notifications</h4>
+          <p class="settings-note">Get reminder notifications in supported PWA browsers while the app is running.</p>
+          <div class="settings-inline reminder-toggle-row">
+            <label for="remindersEnabled">Enable reminders</label>
+            <input type="checkbox" id="remindersEnabled">
+          </div>
+          <div class="settings-inline">
+            <label for="workoutReminderTime">Workout reminder</label>
+            <input type="time" id="workoutReminderTime" value="18:00">
+          </div>
+          <div class="settings-inline reminder-toggle-row">
+            <label for="restDayRemindersEnabled">Rest-day reminders</label>
+            <input type="checkbox" id="restDayRemindersEnabled" checked>
+          </div>
+          <div class="settings-inline">
+            <label for="restDayReminderTime">Rest-day reminder</label>
+            <input type="time" id="restDayReminderTime" value="10:00">
+          </div>
+          <div class="settings-inline">
+            <label for="streakRiskTime">Streak-risk warning</label>
+            <input type="time" id="streakRiskTime" value="20:00">
+          </div>
+          <p id="reminderStatus" class="data-action-status"></p>
+
+          <div class="settings-divider"></div>
           <h4 class="settings-title">Data Management</h4>
           <p class="settings-note">Export or import your progress, routines, charts, and toolbar settings.</p>
           <div class="settings-inline">
@@ -123,11 +148,18 @@
         <div class="welcome-card">
           <h2>Welcome, Adventurer!</h2>
           <p>Complete quests and log workouts to earn XP and level up. Your fitness journey awaits.</p>
+          <div class="welcome-actions">
+            <button type="button" class="btn btn-secondary repeat-last-workout-btn" id="repeatLastWorkoutDashboardBtn" disabled>Repeat Last Workout</button>
+          </div>
         </div>
         <div class="dashboard-grid">
           <div class="card today-quests">
             <h3>Today's Quests</h3>
             <div id="todayQuestsList"></div>
+          </div>
+          <div class="card todays-plan">
+            <h3>Today's Planned Workout</h3>
+            <div id="todaysPlannedWorkout"></div>
           </div>
           <div class="card recent-activity">
             <h3>Recent Activity</h3>
@@ -174,6 +206,7 @@
                   </div>
                   <button type="button" class="btn btn-secondary" id="loadTemplateBtn">Load Template</button>
                   <button type="button" class="btn btn-secondary" id="saveTemplateBtn" disabled>Save as Template</button>
+                  <button type="button" class="btn btn-secondary repeat-last-workout-btn" id="repeatLastWorkoutBuilderBtn" disabled>Repeat Last Workout</button>
                   <button type="button" class="btn btn-secondary" id="addExerciseBtn">+ Add Exercise</button>
                 </div>
               </div>
@@ -188,6 +221,12 @@
               </div>
 
               <div id="gymExercisesList" class="gym-exercises-list"></div>
+
+              <div class="routine-planner card">
+                <h3>Weekly Routine Planner</h3>
+                <p class="routine-planner-note">Assign a template to each day and track completion for the current week.</p>
+                <div id="routinePlannerList" class="routine-planner-list"></div>
+              </div>
 
               <div class="gym-footer">
                 <button type="button" class="btn btn-primary btn-large" id="finishGymWorkout" disabled>Finish Workout</button>
@@ -373,6 +412,7 @@
         <div id="achievementsList" class="achievements-grid"></div>
       </section>
     </main>
+    <div id="appToast" class="app-toast" role="status" aria-live="polite"></div>
   </div>
 
   <script src="cloud-config.js"></script>

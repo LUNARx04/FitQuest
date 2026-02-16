@@ -326,6 +326,59 @@ body {
   color: var(--text-muted);
 }
 
+.welcome-actions {
+  margin-top: 1rem;
+}
+
+.welcome-actions .btn {
+  width: auto;
+}
+
+.today-plan-empty {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.today-plan-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+}
+
+.today-plan-title {
+  font-weight: 600;
+}
+
+.today-plan-meta {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  margin-top: 0.2rem;
+}
+
+.plan-status {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.plan-status.complete {
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #10b981;
+}
+
+.plan-status.pending {
+  border-color: rgba(245, 158, 11, 0.45);
+  color: #f59e0b;
+}
+
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -702,6 +755,38 @@ body {
   border-radius: 4px;
 }
 
+.exercise-rest-control {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+.exercise-rest-control label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.exercise-rest-preset,
+.exercise-rest-custom {
+  padding: 0.25rem 0.45rem;
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+}
+
+.exercise-rest-preset {
+  min-width: 86px;
+}
+
+.exercise-rest-custom {
+  width: 64px;
+}
+
 .btn-icon {
   background: none;
   border: none;
@@ -765,10 +850,59 @@ body {
   opacity: 0.6;
 }
 
+.set-input-control {
+  display: grid;
+  grid-template-columns: 28px 1fr 28px;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.set-stepper {
+  height: 100%;
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 1rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.set-stepper:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
 .set-actions {
   display: flex;
   gap: 0.25rem;
   align-items: center;
+  flex-wrap: wrap;
+}
+
+.set-suggestion-badge {
+  font-size: 0.72rem;
+  color: #7dd3fc;
+  background: rgba(14, 116, 144, 0.2);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 999px;
+  padding: 0.15rem 0.45rem;
+}
+
+.btn-apply-suggestion {
+  padding: 0.2rem 0.45rem;
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  border-radius: 6px;
+  color: #22c55e;
+  font-size: 0.72rem;
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+}
+
+.btn-apply-suggestion:hover {
+  background: rgba(34, 197, 94, 0.22);
 }
 
 .btn-rest {
@@ -824,6 +958,55 @@ body {
 .gym-footer {
   padding-top: 1rem;
   border-top: 1px solid var(--border);
+}
+
+.routine-planner {
+  margin-bottom: 1rem;
+}
+
+.routine-planner h3 {
+  margin-bottom: 0.35rem;
+}
+
+.routine-planner-note {
+  color: var(--text-muted);
+  font-size: 0.83rem;
+  margin-bottom: 0.9rem;
+}
+
+.routine-planner-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.routine-row {
+  display: grid;
+  grid-template-columns: 60px 1fr auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.routine-day {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.routine-row select {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  background: var(--bg-dark);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: 'Outfit', sans-serif;
+}
+
+.routine-row select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
 }
 
 /* Rest Timer Overlay */
@@ -986,6 +1169,25 @@ body {
   font-family: 'Outfit', sans-serif;
 }
 
+.settings-inline input[type="time"] {
+  background: var(--bg-dark);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.35rem 0.55rem;
+  font-family: 'Outfit', sans-serif;
+}
+
+.reminder-toggle-row {
+  align-items: center;
+}
+
+.reminder-toggle-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent-primary);
+}
+
 .settings-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1017,6 +1219,29 @@ body {
   font-size: 0.82rem;
   color: var(--text-muted);
   min-height: 1rem;
+}
+
+.app-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.25rem;
+  transform: translate(-50%, 10px);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1200;
+  padding: 0.55rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  background: rgba(20, 24, 30, 0.9);
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.app-toast.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 .exercise-filter {
@@ -1091,13 +1316,37 @@ body {
 
 /* Responsive gym sets */
 @media (max-width: 600px) {
+  .exercise-rest-control {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .exercise-rest-preset {
+    flex: 1;
+    min-width: 0;
+  }
+
   .gym-sets-header,
   .gym-set-row {
     grid-template-columns: 30px 1fr 1fr 1fr;
   }
 
+  .set-input-control {
+    grid-template-columns: 24px 1fr 24px;
+    gap: 0.2rem;
+  }
+
   .set-actions {
     flex-direction: column;
+  }
+
+  .routine-row {
+    grid-template-columns: 44px 1fr;
+  }
+
+  .routine-row .plan-status {
+    justify-self: start;
+    grid-column: 2 / 3;
   }
 }
 
