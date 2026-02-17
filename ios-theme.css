@@ -67,6 +67,14 @@
     border-radius: var(--radius-md);
   }
 
+  .profile-chip {
+    background: var(--glass-elevated);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    min-width: 108px;
+  }
+
   .toolbar-settings-btn {
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid var(--glass-border);
@@ -201,6 +209,13 @@
   }
 
   .settings-inline input[type="time"] {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    color: #fff;
+  }
+
+  .settings-inline input[type="text"] {
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid var(--glass-border);
     border-radius: 10px;

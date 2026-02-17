@@ -10,6 +10,9 @@ const state = {
   gymWorkouts: [],
   workoutTemplates: [],
   bodyWeightLogs: [],
+  profile: {
+    username: ''
+  },
   routineSchedule: {},
   routineCompletions: {},
   reminderSettings: {
@@ -140,6 +143,7 @@ function saveState() {
     gymWorkouts: state.gymWorkouts,
     workoutTemplates: state.workoutTemplates,
     bodyWeightLogs: state.bodyWeightLogs,
+    profile: state.profile,
     routineSchedule: state.routineSchedule,
     routineCompletions: state.routineCompletions,
     reminderSettings: state.reminderSettings,
@@ -195,6 +199,36 @@ function normalizeReminderMeta(input) {
     restSentOn: typeof meta.restSentOn === 'string' ? meta.restSentOn : null,
     streakRiskSentOn: typeof meta.streakRiskSentOn === 'string' ? meta.streakRiskSentOn : null
   };
+}
+
+function normalizeUsername(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  return text.replace(/[^\w.\- ]+/g, '').slice(0, 24).trim();
+}
+
+function normalizeProfile(input) {
+  const profile = input && typeof input === 'object' ? input : {};
+  return {
+    username: normalizeUsername(profile.username)
+  };
+}
+
+function getProfileDisplayName() {
+  const username = normalizeUsername(state.profile?.username);
+  if (username) return username;
+  const email = cloudSync.user?.email || '';
+  if (email.includes('@')) return email.split('@')[0];
+  return 'Adventurer';
+}
+
+function renderDashboardWelcome() {
+  const title = document.getElementById('dashboardWelcomeTitle');
+  const headerUsername = document.getElementById('headerUsername');
+  const displayName = getProfileDisplayName();
+  if (!title) return;
+  title.textContent = `Welcome, ${displayName}!`;
+  if (headerUsername) headerUsername.textContent = displayName;
 }
 
 function isNotificationSupported() {
@@ -330,6 +364,7 @@ function buildExportPayload() {
     gymWorkouts: state.gymWorkouts,
     workoutTemplates: state.workoutTemplates,
     bodyWeightLogs: state.bodyWeightLogs,
+    profile: state.profile,
     routineSchedule: state.routineSchedule,
     routineCompletions: state.routineCompletions,
     reminderSettings: state.reminderSettings,
@@ -408,7 +443,8 @@ function buildCsvExport() {
     ['toolbarTabs', getSavedToolbarTabs().join('|')],
     ['routineSchedule', JSON.stringify(state.routineSchedule || {})],
     ['routineCompletions', JSON.stringify(state.routineCompletions || {})],
-    ['reminderSettings', JSON.stringify(state.reminderSettings || {})]
+    ['reminderSettings', JSON.stringify(state.reminderSettings || {})],
+    ['profileUsername', normalizeUsername(state.profile?.username)]
   ]));
 
   return sections.join('\n');
@@ -439,6 +475,7 @@ function sanitizeImportedState(raw) {
     gymWorkouts: Array.isArray(raw.gymWorkouts) ? raw.gymWorkouts : [],
     workoutTemplates: Array.isArray(raw.workoutTemplates) ? raw.workoutTemplates : [],
     bodyWeightLogs: Array.isArray(raw.bodyWeightLogs) ? raw.bodyWeightLogs : [],
+    profile: raw.profile && typeof raw.profile === 'object' ? raw.profile : {},
     routineSchedule: raw.routineSchedule && typeof raw.routineSchedule === 'object' ? raw.routineSchedule : {},
     routineCompletions: raw.routineCompletions && typeof raw.routineCompletions === 'object' ? raw.routineCompletions : {},
     reminderSettings: raw.reminderSettings && typeof raw.reminderSettings === 'object' ? raw.reminderSettings : {},
@@ -459,6 +496,7 @@ function sanitizeImportedState(raw) {
       weight: Number.isFinite(Number(entry?.weight)) ? Number(entry.weight) : null
     }))
     .filter(entry => entry.weight != null);
+  safe.profile = normalizeProfile(safe.profile);
   safe.reminderSettings = normalizeReminderSettings(safe.reminderSettings);
   safe.reminderMeta = normalizeReminderMeta(safe.reminderMeta);
 
@@ -489,6 +527,7 @@ function applyImportedData(importedState, importedToolbarTabs, mode) {
     state.gymWorkouts = mergeById(state.gymWorkouts, importedState.gymWorkouts);
     state.workoutTemplates = mergeById(state.workoutTemplates, importedState.workoutTemplates);
     state.bodyWeightLogs = mergeById(state.bodyWeightLogs, importedState.bodyWeightLogs);
+    state.profile = normalizeProfile({ ...(state.profile || {}), ...(importedState.profile || {}) });
     state.routineSchedule = { ...(state.routineSchedule || {}), ...(importedState.routineSchedule || {}) };
     state.routineCompletions = { ...(state.routineCompletions || {}), ...(importedState.routineCompletions || {}) };
     state.reminderSettings = normalizeReminderSettings({ ...(state.reminderSettings || {}), ...(importedState.reminderSettings || {}) });
@@ -509,6 +548,7 @@ function applyImportedData(importedState, importedToolbarTabs, mode) {
     state.gymWorkouts = importedState.gymWorkouts;
     state.workoutTemplates = importedState.workoutTemplates;
     state.bodyWeightLogs = importedState.bodyWeightLogs || [];
+    state.profile = normalizeProfile(importedState.profile || {});
     state.routineSchedule = importedState.routineSchedule || {};
     state.routineCompletions = importedState.routineCompletions || {};
     state.reminderSettings = normalizeReminderSettings(importedState.reminderSettings || {});
@@ -541,6 +581,7 @@ function hasMeaningfulStateData(inputState) {
     (inputState.gymWorkouts && inputState.gymWorkouts.length > 0) ||
     (inputState.workoutTemplates && inputState.workoutTemplates.length > 0) ||
     (inputState.bodyWeightLogs && inputState.bodyWeightLogs.length > 0) ||
+    !!normalizeUsername(inputState.profile?.username) ||
     Object.keys(inputState.routineSchedule || {}).length > 0 ||
     Object.keys(inputState.routineCompletions || {}).length > 0 ||
     (inputState.completedQuests && inputState.completedQuests.length > 0) ||
@@ -645,14 +686,18 @@ async function pullCloudStateAndMigrate() {
 async function handleAuthState(user) {
   cloudSync.user = user || null;
   const emailInput = document.getElementById('authEmail');
+  const usernameInput = document.getElementById('profileUsername');
   if (emailInput) emailInput.value = user?.email || '';
+  if (usernameInput) usernameInput.value = state.profile?.username || '';
   if (!user) {
     setAuthStatus('Not signed in');
+    renderDashboardWelcome();
     return;
   }
   setAuthStatus(`Signed in as ${user.email || 'user'}`);
   await pullCloudStateAndMigrate();
   await flushCloudSyncQueue();
+  renderDashboardWelcome();
 }
 
 function initCloudSync() {
@@ -818,13 +863,15 @@ function initToolbarSettings() {
   const syncNowBtn = document.getElementById('syncNowBtn');
   const authEmail = document.getElementById('authEmail');
   const authPassword = document.getElementById('authPassword');
+  const profileUsername = document.getElementById('profileUsername');
+  const saveUsernameBtn = document.getElementById('saveUsernameBtn');
   const remindersEnabled = document.getElementById('remindersEnabled');
   const workoutReminderTime = document.getElementById('workoutReminderTime');
   const restDayRemindersEnabled = document.getElementById('restDayRemindersEnabled');
   const restDayReminderTime = document.getElementById('restDayReminderTime');
   const streakRiskTime = document.getElementById('streakRiskTime');
   const modal = document.getElementById('toolbarSettingsModal');
-  if (!openBtn || !closeBtn || !saveBtn || !modal || !exportJsonBtn || !exportCsvBtn || !importJsonBtn || !importInput || !importMode || !signUpBtn || !signInBtn || !signOutBtn || !syncNowBtn || !authEmail || !authPassword || !remindersEnabled || !workoutReminderTime || !restDayRemindersEnabled || !restDayReminderTime || !streakRiskTime) return;
+  if (!openBtn || !closeBtn || !saveBtn || !modal || !exportJsonBtn || !exportCsvBtn || !importJsonBtn || !importInput || !importMode || !signUpBtn || !signInBtn || !signOutBtn || !syncNowBtn || !authEmail || !authPassword || !profileUsername || !saveUsernameBtn || !remindersEnabled || !workoutReminderTime || !restDayRemindersEnabled || !restDayReminderTime || !streakRiskTime) return;
 
   applyToolbarTabs(getSavedToolbarTabs());
   state.reminderSettings = normalizeReminderSettings(state.reminderSettings || {});
@@ -839,7 +886,12 @@ function initToolbarSettings() {
     streakRiskTime.value = s.streakRiskTime;
   }
 
+  function syncProfileControlsFromState() {
+    profileUsername.value = normalizeUsername(state.profile?.username);
+  }
+
   syncReminderControlsFromState();
+  syncProfileControlsFromState();
   if (!isNotificationSupported()) {
     setReminderStatus('Notifications are not supported in this browser. Reminders will stay in-app only.', true);
   } else if (Notification.permission === 'denied') {
@@ -851,6 +903,7 @@ function initToolbarSettings() {
   openBtn.addEventListener('click', () => {
     renderToolbarOptions(getSavedToolbarTabs());
     syncReminderControlsFromState();
+    syncProfileControlsFromState();
     modal.classList.remove('hidden');
   });
 
@@ -971,6 +1024,16 @@ function initToolbarSettings() {
     }
     queueCloudSync();
     await flushCloudSyncQueue();
+  });
+
+  saveUsernameBtn.addEventListener('click', () => {
+    const nextUsername = normalizeUsername(profileUsername.value);
+    if (!state.profile || typeof state.profile !== 'object') state.profile = { username: '' };
+    state.profile.username = nextUsername;
+    profileUsername.value = nextUsername;
+    saveState();
+    renderDashboardWelcome();
+    showToast(nextUsername ? `Username saved: ${nextUsername}` : 'Username cleared');
   });
 
   remindersEnabled.addEventListener('change', async () => {
@@ -1163,6 +1226,7 @@ function updateUI() {
   renderQuests();
   renderAchievements();
   renderHard75();
+  renderDashboardWelcome();
   renderTodayPlannedWorkout();
   renderRoutinePlanner();
   renderBodyWeightProgress();
@@ -2505,6 +2569,7 @@ state.xpToNextLevel = state.xpToNextLevel || xpForLevel(state.level);
 state.gymWorkouts = state.gymWorkouts || [];
 state.workoutTemplates = state.workoutTemplates || [];
 state.bodyWeightLogs = state.bodyWeightLogs || [];
+state.profile = normalizeProfile(state.profile || {});
 state.routineSchedule = state.routineSchedule || {};
 state.routineCompletions = state.routineCompletions || {};
 state.reminderSettings = normalizeReminderSettings(state.reminderSettings || {});

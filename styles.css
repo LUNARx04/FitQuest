@@ -104,6 +104,23 @@ body {
   font-size: 1.1rem;
 }
 
+.profile-chip {
+  background: var(--bg-elevated);
+  padding: 0.5rem 0.85rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  min-width: 120px;
+}
+
+.profile-chip .stat-value {
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .level-badge {
   background: var(--bg-elevated);
   padding: 0.5rem 1rem;
@@ -1203,6 +1220,15 @@ body {
 }
 
 .settings-inline select {
+  background: var(--bg-dark);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.35rem 0.55rem;
+  font-family: 'Outfit', sans-serif;
+}
+
+.settings-inline input[type="text"] {
   background: var(--bg-dark);
   color: var(--text-primary);
   border: 1px solid var(--border);
