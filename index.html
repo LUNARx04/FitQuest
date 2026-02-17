@@ -184,8 +184,9 @@
           <p>Train, log, and track progress in one place.</p>
         </div>
         <div class="workout-subnav">
-          <button class="workout-subtab active" data-workout-view="builder">Workout</button>
+          <button class="workout-subtab active" data-workout-view="builder">Builder</button>
           <button class="workout-subtab" data-workout-view="progress">Progress</button>
+          <button class="workout-subtab" data-workout-view="planner">Planner</button>
           <button class="workout-subtab" data-workout-view="log">Log Workout</button>
         </div>
 
@@ -193,7 +194,11 @@
           <div class="workout-subpage active" id="workout-view-builder">
             <div class="gym-tracker">
               <div class="gym-header">
-                <h2>Workout</h2>
+                <h2>Workout Builder</h2>
+                <div class="active-workout-timer" id="activeWorkoutTimer">
+                  <span class="active-workout-label">Elapsed</span>
+                  <span class="active-workout-value" id="activeWorkoutElapsed">00:00</span>
+                </div>
                 <div class="gym-actions">
                   <div class="rest-timer-control">
                     <label for="defaultRest">Default rest:</label>
@@ -221,12 +226,6 @@
               </div>
 
               <div id="gymExercisesList" class="gym-exercises-list"></div>
-
-              <div class="routine-planner card">
-                <h3>Weekly Routine Planner</h3>
-                <p class="routine-planner-note">Assign a template to each day and track completion for the current week.</p>
-                <div id="routinePlannerList" class="routine-planner-list"></div>
-              </div>
 
               <div class="gym-footer">
                 <button type="button" class="btn btn-primary btn-large" id="finishGymWorkout" disabled>Finish Workout</button>
@@ -259,6 +258,38 @@
             <div id="progressEmpty" class="progress-empty hidden">
               <p>No data yet for this exercise. Complete gym workouts to see your progress.</p>
             </div>
+
+            <div class="bodyweight-panel card">
+              <h3>Body Weight</h3>
+              <p class="bodyweight-note">Log and trend your scale weight over time.</p>
+              <form id="bodyWeightForm" class="bodyweight-form">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="bodyWeightDate">Date</label>
+                    <input type="date" id="bodyWeightDate" required>
+                  </div>
+                  <div class="form-group">
+                    <label for="bodyWeightInput">Weight (kg)</label>
+                    <input type="number" id="bodyWeightInput" min="20" max="500" step="0.1" placeholder="e.g. 78.4" required>
+                  </div>
+                </div>
+                <button type="submit" class="btn btn-secondary">Add Weight Entry</button>
+              </form>
+              <div class="chart-container bodyweight-chart-container">
+                <canvas id="bodyWeightChart"></canvas>
+              </div>
+              <div id="bodyWeightEmpty" class="progress-empty hidden">
+                <p>No body weight entries yet. Add your first check-in.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="workout-subpage" id="workout-view-planner">
+            <div class="routine-planner card">
+              <h3>Weekly Routine Planner</h3>
+              <p class="routine-planner-note">Assign a template to each day and track completion for the current week.</p>
+              <div id="routinePlannerList" class="routine-planner-list"></div>
+            </div>
           </div>
 
           <div class="workout-subpage" id="workout-view-log">
@@ -276,6 +307,13 @@
                     <option value="swim">Swimming</option>
                     <option value="other">Other</option>
                   </select>
+                </div>
+                <div id="gymLogActions" class="gym-log-actions hidden">
+                  <p class="gym-log-note">For gym sessions, start an active workout and add exercises in Builder.</p>
+                  <div class="settings-actions">
+                    <button type="button" class="btn btn-secondary" id="startGymWorkoutFromLog">Start Active Gym Workout</button>
+                    <button type="button" class="btn btn-secondary" id="addExerciseFromLog">Add Exercise</button>
+                  </div>
                 </div>
                 <div class="form-row">
                   <div class="form-group">

@@ -9,6 +9,7 @@ const state = {
   workouts: [],
   gymWorkouts: [],
   workoutTemplates: [],
+  bodyWeightLogs: [],
   routineSchedule: {},
   routineCompletions: {},
   reminderSettings: {
@@ -56,6 +57,7 @@ let gymState = {
   exercises: [],
   startTime: null,
   activeTemplateId: null,
+  elapsedTimerInterval: null,
   restTimerInterval: null,
   restSecondsRemaining: 0
 };
@@ -137,6 +139,7 @@ function saveState() {
     workouts: state.workouts,
     gymWorkouts: state.gymWorkouts,
     workoutTemplates: state.workoutTemplates,
+    bodyWeightLogs: state.bodyWeightLogs,
     routineSchedule: state.routineSchedule,
     routineCompletions: state.routineCompletions,
     reminderSettings: state.reminderSettings,
@@ -326,6 +329,7 @@ function buildExportPayload() {
     workouts: state.workouts,
     gymWorkouts: state.gymWorkouts,
     workoutTemplates: state.workoutTemplates,
+    bodyWeightLogs: state.bodyWeightLogs,
     routineSchedule: state.routineSchedule,
     routineCompletions: state.routineCompletions,
     reminderSettings: state.reminderSettings,
@@ -378,6 +382,13 @@ function buildCsvExport() {
   sections.push('WORKOUT_TEMPLATES');
   sections.push(toCsv(['template_id', 'template_name', 'exercise_id', 'exercise_name', 'muscle', 'set_count'], templateRows));
 
+  const bodyWeightRows = (state.bodyWeightLogs || []).map(entry => [
+    entry.id, entry.date, entry.weight
+  ]);
+  sections.push('');
+  sections.push('BODY_WEIGHT');
+  sections.push(toCsv(['id', 'date_iso', 'weight_kg'], bodyWeightRows));
+
   const hard75Rows = Object.entries((state.hard75 && state.hard75.logs) || {}).map(([date, log]) => ([
     date,
     !!log.diet,
@@ -427,6 +438,7 @@ function sanitizeImportedState(raw) {
     workouts: Array.isArray(raw.workouts) ? raw.workouts : [],
     gymWorkouts: Array.isArray(raw.gymWorkouts) ? raw.gymWorkouts : [],
     workoutTemplates: Array.isArray(raw.workoutTemplates) ? raw.workoutTemplates : [],
+    bodyWeightLogs: Array.isArray(raw.bodyWeightLogs) ? raw.bodyWeightLogs : [],
     routineSchedule: raw.routineSchedule && typeof raw.routineSchedule === 'object' ? raw.routineSchedule : {},
     routineCompletions: raw.routineCompletions && typeof raw.routineCompletions === 'object' ? raw.routineCompletions : {},
     reminderSettings: raw.reminderSettings && typeof raw.reminderSettings === 'object' ? raw.reminderSettings : {},
@@ -440,6 +452,13 @@ function sanitizeImportedState(raw) {
     lastCompletedDate: typeof safe.hard75.lastCompletedDate === 'string' ? safe.hard75.lastCompletedDate : null,
     logs: safe.hard75.logs && typeof safe.hard75.logs === 'object' ? safe.hard75.logs : {}
   };
+  safe.bodyWeightLogs = (safe.bodyWeightLogs || [])
+    .map(entry => ({
+      id: entry?.id != null ? entry.id : Date.now() + Math.random(),
+      date: typeof entry?.date === 'string' ? entry.date : new Date().toISOString(),
+      weight: Number.isFinite(Number(entry?.weight)) ? Number(entry.weight) : null
+    }))
+    .filter(entry => entry.weight != null);
   safe.reminderSettings = normalizeReminderSettings(safe.reminderSettings);
   safe.reminderMeta = normalizeReminderMeta(safe.reminderMeta);
 
@@ -469,6 +488,7 @@ function applyImportedData(importedState, importedToolbarTabs, mode) {
     state.workouts = mergeById(state.workouts, importedState.workouts);
     state.gymWorkouts = mergeById(state.gymWorkouts, importedState.gymWorkouts);
     state.workoutTemplates = mergeById(state.workoutTemplates, importedState.workoutTemplates);
+    state.bodyWeightLogs = mergeById(state.bodyWeightLogs, importedState.bodyWeightLogs);
     state.routineSchedule = { ...(state.routineSchedule || {}), ...(importedState.routineSchedule || {}) };
     state.routineCompletions = { ...(state.routineCompletions || {}), ...(importedState.routineCompletions || {}) };
     state.reminderSettings = normalizeReminderSettings({ ...(state.reminderSettings || {}), ...(importedState.reminderSettings || {}) });
@@ -488,6 +508,7 @@ function applyImportedData(importedState, importedToolbarTabs, mode) {
     state.workouts = importedState.workouts;
     state.gymWorkouts = importedState.gymWorkouts;
     state.workoutTemplates = importedState.workoutTemplates;
+    state.bodyWeightLogs = importedState.bodyWeightLogs || [];
     state.routineSchedule = importedState.routineSchedule || {};
     state.routineCompletions = importedState.routineCompletions || {};
     state.reminderSettings = normalizeReminderSettings(importedState.reminderSettings || {});
@@ -508,6 +529,7 @@ function applyImportedData(importedState, importedToolbarTabs, mode) {
   renderGymExercises();
   updateUI();
   renderProgressExerciseOptions();
+  renderBodyWeightProgress();
   renderRoutinePlanner();
   evaluateReminderTriggers();
 }
@@ -518,6 +540,7 @@ function hasMeaningfulStateData(inputState) {
     (inputState.workouts && inputState.workouts.length > 0) ||
     (inputState.gymWorkouts && inputState.gymWorkouts.length > 0) ||
     (inputState.workoutTemplates && inputState.workoutTemplates.length > 0) ||
+    (inputState.bodyWeightLogs && inputState.bodyWeightLogs.length > 0) ||
     Object.keys(inputState.routineSchedule || {}).length > 0 ||
     Object.keys(inputState.routineCompletions || {}).length > 0 ||
     (inputState.completedQuests && inputState.completedQuests.length > 0) ||
@@ -994,6 +1017,7 @@ function setWorkoutView(view) {
   const transitionId = ++workoutSubviewTransitionId;
   document.querySelectorAll('.workout-subtab').forEach(t => t.classList.remove('active'));
   document.querySelector(`.workout-subtab[data-workout-view="${view}"]`)?.classList.add('active');
+  if (view === 'builder') refreshActiveWorkoutTimer();
 
   if (!current) {
     next.classList.add('active');
@@ -1016,6 +1040,9 @@ function initWorkoutSubpages() {
       if (tab.dataset.workoutView === 'progress') {
         renderProgressExerciseOptions();
         renderProgressChart();
+        renderBodyWeightProgress();
+      } else if (tab.dataset.workoutView === 'planner') {
+        renderRoutinePlanner();
       }
     });
   });
@@ -1025,6 +1052,9 @@ function initWorkoutSubpages() {
     if (activeSubview === 'progress') {
       renderProgressExerciseOptions();
       renderProgressChart();
+      renderBodyWeightProgress();
+    } else if (activeSubview === 'planner') {
+      renderRoutinePlanner();
     }
   });
 }
@@ -1046,6 +1076,13 @@ function initIOSHeaderBehavior() {
 document.getElementById('workoutForm').addEventListener('submit', (e) => {
   e.preventDefault();
   const type = document.getElementById('workoutType').value;
+
+  if (type === 'gym') {
+    startGymWorkoutFromLog(true);
+    showToast('Active gym workout started');
+    return;
+  }
+
   const duration = parseInt(document.getElementById('duration').value);
   const intensity = document.getElementById('intensity').value;
   const notes = document.getElementById('notes').value;
@@ -1073,6 +1110,7 @@ document.getElementById('workoutForm').addEventListener('submit', (e) => {
   document.getElementById('workoutForm').reset();
   document.getElementById('duration').value = 30;
   document.getElementById('intensity').value = 'moderate';
+  updateLogWorkoutTypeUI();
 
   // Switch to dashboard to show the new activity
   document.querySelector('.nav-tab[data-tab="dashboard"]').click();
@@ -1127,6 +1165,8 @@ function updateUI() {
   renderHard75();
   renderTodayPlannedWorkout();
   renderRoutinePlanner();
+  renderBodyWeightProgress();
+  refreshActiveWorkoutTimer();
   updateSaveTemplateButton();
   updateRepeatLastWorkoutButtons();
 }
@@ -1384,6 +1424,62 @@ function renderAchievements() {
   }).join('');
 }
 
+function formatElapsedTime(ms) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  }
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
+
+function refreshActiveWorkoutTimer() {
+  const valueEl = document.getElementById('activeWorkoutElapsed');
+  const timerEl = document.getElementById('activeWorkoutTimer');
+  if (!valueEl || !timerEl) return;
+
+  if (!gymState.startTime) {
+    valueEl.textContent = '00:00';
+    timerEl.classList.remove('running');
+    if (gymState.elapsedTimerInterval) {
+      clearInterval(gymState.elapsedTimerInterval);
+      gymState.elapsedTimerInterval = null;
+    }
+    return;
+  }
+
+  const elapsed = Date.now() - new Date(gymState.startTime).getTime();
+  valueEl.textContent = formatElapsedTime(elapsed);
+  timerEl.classList.add('running');
+  if (!gymState.elapsedTimerInterval) {
+    gymState.elapsedTimerInterval = setInterval(() => {
+      const activeElapsed = Date.now() - new Date(gymState.startTime).getTime();
+      valueEl.textContent = formatElapsedTime(activeElapsed);
+    }, 1000);
+  }
+}
+
+function updateLogWorkoutTypeUI() {
+  const type = document.getElementById('workoutType')?.value;
+  const gymActions = document.getElementById('gymLogActions');
+  if (!gymActions) return;
+  gymActions.classList.toggle('hidden', type !== 'gym');
+}
+
+function startGymWorkoutFromLog(openPicker = false) {
+  if (!gymState.startTime) {
+    gymState.startTime = new Date();
+  }
+  refreshActiveWorkoutTimer();
+  switchMainTab('workout');
+  setWorkoutView('builder');
+  if (openPicker) {
+    openExercisePicker();
+  }
+}
+
 // ========== GYM TRACKER ==========
 
 function getDefaultRestSeconds() {
@@ -1539,6 +1635,7 @@ function repeatLastWorkout() {
   gymState.startTime = new Date();
   gymState.activeTemplateId = lastWorkout.templateId || null;
   renderGymExercises();
+  refreshActiveWorkoutTimer();
   updateSaveTemplateButton();
   document.getElementById('finishGymWorkout').disabled = false;
   switchMainTab('workout');
@@ -1557,6 +1654,7 @@ function addExerciseToWorkout(exercise) {
     sets: [{ reps: '', weight: '' }]
   });
   renderGymExercises();
+  refreshActiveWorkoutTimer();
   updateSaveTemplateButton();
   document.getElementById('finishGymWorkout').disabled = gymState.exercises.length === 0;
   document.getElementById('addExerciseModal').classList.add('hidden');
@@ -1566,6 +1664,7 @@ function removeExerciseFromWorkout(index) {
   gymState.activeTemplateId = null;
   gymState.exercises.splice(index, 1);
   renderGymExercises();
+  refreshActiveWorkoutTimer();
   updateSaveTemplateButton();
   document.getElementById('finishGymWorkout').disabled = gymState.exercises.length === 0;
 }
@@ -1926,6 +2025,7 @@ function finishGymWorkout() {
   gymState.startTime = null;
   gymState.activeTemplateId = null;
   renderGymExercises();
+  refreshActiveWorkoutTimer();
   document.getElementById('finishGymWorkout').disabled = true;
 
   updateStreak();
@@ -1939,6 +2039,15 @@ function finishGymWorkout() {
 
 function initGymTracker() {
   document.getElementById('addExerciseBtn').addEventListener('click', openExercisePicker);
+  document.getElementById('startGymWorkoutFromLog')?.addEventListener('click', () => {
+    startGymWorkoutFromLog(false);
+    showToast('Active gym workout started');
+  });
+  document.getElementById('addExerciseFromLog')?.addEventListener('click', () => {
+    startGymWorkoutFromLog(true);
+  });
+  document.getElementById('workoutType')?.addEventListener('change', updateLogWorkoutTypeUI);
+  updateLogWorkoutTypeUI();
   document.getElementById('closeExerciseModal').addEventListener('click', () => {
     document.getElementById('addExerciseModal').classList.add('hidden');
   });
@@ -2029,6 +2138,7 @@ function loadTemplate(index) {
   gymState.startTime = new Date();
   gymState.activeTemplateId = t.id;
   renderGymExercises();
+  refreshActiveWorkoutTimer();
   document.getElementById('finishGymWorkout').disabled = false;
 }
 
@@ -2083,6 +2193,7 @@ function saveWorkoutTemplate() {
 
 // ========== PROGRESS CHARTS ==========
 let progressChartInstance = null;
+let bodyWeightChartInstance = null;
 
 function getExerciseHistory(exerciseId) {
   const data = [];
@@ -2217,11 +2328,95 @@ function renderProgressExerciseOptions() {
 function initProgressTab() {
   const exerciseSelect = document.getElementById('progressExerciseSelect');
   const metricSelect = document.getElementById('progressMetric');
+  const bodyWeightForm = document.getElementById('bodyWeightForm');
+  const bodyWeightDate = document.getElementById('bodyWeightDate');
+  const bodyWeightInput = document.getElementById('bodyWeightInput');
   if (!exerciseSelect) return;
 
+  if (bodyWeightDate) bodyWeightDate.value = new Date().toISOString().slice(0, 10);
   renderProgressExerciseOptions();
+  renderBodyWeightProgress();
   exerciseSelect.addEventListener('change', renderProgressChart);
   metricSelect?.addEventListener('change', renderProgressChart);
+  bodyWeightForm?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const dateRaw = bodyWeightDate?.value;
+    const weightRaw = Number.parseFloat(bodyWeightInput?.value || '');
+    if (!dateRaw || !Number.isFinite(weightRaw) || weightRaw <= 0) return;
+    const isoDate = new Date(`${dateRaw}T12:00:00`).toISOString();
+    state.bodyWeightLogs = state.bodyWeightLogs || [];
+    state.bodyWeightLogs.push({
+      id: Date.now(),
+      date: isoDate,
+      weight: Number(weightRaw.toFixed(1))
+    });
+    state.bodyWeightLogs.sort((a, b) => Date.parse(a.date || 0) - Date.parse(b.date || 0));
+    saveState();
+    renderBodyWeightProgress();
+    if (bodyWeightInput) bodyWeightInput.value = '';
+  });
+}
+
+function renderBodyWeightProgress() {
+  const canvas = document.getElementById('bodyWeightChart');
+  const emptyEl = document.getElementById('bodyWeightEmpty');
+  if (!canvas || !emptyEl) return;
+
+  const logs = [...(state.bodyWeightLogs || [])]
+    .filter(entry => Number.isFinite(Number(entry.weight)) && Number(entry.weight) > 0)
+    .sort((a, b) => Date.parse(a.date || 0) - Date.parse(b.date || 0));
+
+  if (!logs.length) {
+    canvas.parentElement.classList.add('hidden');
+    emptyEl.classList.remove('hidden');
+    if (bodyWeightChartInstance) {
+      bodyWeightChartInstance.destroy();
+      bodyWeightChartInstance = null;
+    }
+    return;
+  }
+
+  canvas.parentElement.classList.remove('hidden');
+  emptyEl.classList.add('hidden');
+  const labels = logs.map(entry =>
+    new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  );
+  const values = logs.map(entry => Number(entry.weight.toFixed(1)));
+  const ctx = canvas.getContext('2d');
+  if (bodyWeightChartInstance) bodyWeightChartInstance.destroy();
+
+  bodyWeightChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Body Weight (kg)',
+        data: values,
+        borderColor: '#60a5fa',
+        backgroundColor: 'rgba(96, 165, 250, 0.15)',
+        fill: true,
+        tension: 0.3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false }
+      },
+      scales: {
+        y: {
+          beginAtZero: false,
+          grid: { color: 'rgba(45, 53, 72, 0.5)' },
+          ticks: { color: '#94a3b8' }
+        },
+        x: {
+          grid: { color: 'rgba(45, 53, 72, 0.5)' },
+          ticks: { color: '#94a3b8' }
+        }
+      }
+    }
+  });
 }
 
 // ========== 75 HARD ==========
@@ -2309,6 +2504,7 @@ loadState();
 state.xpToNextLevel = state.xpToNextLevel || xpForLevel(state.level);
 state.gymWorkouts = state.gymWorkouts || [];
 state.workoutTemplates = state.workoutTemplates || [];
+state.bodyWeightLogs = state.bodyWeightLogs || [];
 state.routineSchedule = state.routineSchedule || {};
 state.routineCompletions = state.routineCompletions || {};
 state.reminderSettings = normalizeReminderSettings(state.reminderSettings || {});

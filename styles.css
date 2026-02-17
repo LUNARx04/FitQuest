@@ -478,6 +478,20 @@ body {
   margin-bottom: 1.5rem;
 }
 
+.gym-log-actions {
+  margin-bottom: 1rem;
+  padding: 0.85rem;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+}
+
+.gym-log-note {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-bottom: 0.55rem;
+}
+
 .form-group {
   margin-bottom: 1.25rem;
 }
@@ -654,6 +668,34 @@ body {
 
 .gym-header h2 {
   margin: 0;
+}
+
+.active-workout-timer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  min-width: 98px;
+}
+
+.active-workout-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.active-workout-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.92rem;
+  color: var(--text-primary);
+}
+
+.active-workout-timer.running .active-workout-value {
+  color: var(--accent-primary);
 }
 
 .gym-actions {
@@ -1398,6 +1440,25 @@ body {
 
 .progress-empty.hidden {
   display: none;
+}
+
+.bodyweight-panel {
+  margin-top: 1.25rem;
+}
+
+.bodyweight-note {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.bodyweight-form .btn {
+  width: auto;
+}
+
+.bodyweight-chart-container {
+  height: 280px;
+  margin-top: 0.75rem;
 }
 
 /* ========== WORKOUT TEMPLATES ========== */

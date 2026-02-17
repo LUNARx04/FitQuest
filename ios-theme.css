@@ -252,6 +252,21 @@
     border-radius: var(--radius-md);
   }
 
+  .active-workout-timer,
+  .gym-log-actions {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+  }
+
+  .active-workout-label {
+    color: rgba(235, 235, 245, 0.72);
+  }
+
+  .active-workout-value {
+    color: #fff;
+  }
+
   /* Form inputs — iOS style */
   .form-group input,
   .form-group select,
