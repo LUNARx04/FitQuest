@@ -68,6 +68,7 @@
     align-items: center;
     gap: 0.45rem;
     min-width: 0;
+    margin-left: auto;
   }
 
   .stat-label {
