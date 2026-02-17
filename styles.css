@@ -71,6 +71,12 @@ body {
   min-width: 0;
 }
 
+.header-username-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.55rem;
+}
+
 .player-stats {
   display: flex;
   align-items: center;
@@ -120,10 +126,11 @@ body {
   padding: 0.5rem 0.85rem;
   border-radius: 8px;
   border: 1px solid var(--border);
-  min-width: 120px;
+  width: fit-content;
+  max-width: 100%;
 }
 
-.profile-chip .stat-value {
+.profile-chip-text {
   font-family: 'Outfit', sans-serif;
   font-size: 0.95rem;
   color: var(--text-primary);
@@ -1342,6 +1349,37 @@ body {
 .app-toast.visible {
   opacity: 1;
   transform: translate(-50%, 0);
+}
+
+.update-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 4.3rem;
+  transform: translateX(-50%);
+  z-index: 1201;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(20, 24, 30, 0.94);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.32);
+}
+
+.update-banner.hidden {
+  display: none;
+}
+
+.update-banner span {
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  margin-right: 0.2rem;
+}
+
+.update-banner .btn {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.8rem;
 }
 
 .exercise-filter {

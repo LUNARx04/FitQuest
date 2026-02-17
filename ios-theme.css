@@ -100,7 +100,7 @@
     backdrop-filter: blur(10px);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
-    min-width: 108px;
+    min-width: 0;
   }
 
   .toolbar-settings-btn {
@@ -273,6 +273,18 @@
     border: 1px solid var(--glass-border);
     backdrop-filter: saturate(180%) blur(18px);
     -webkit-backdrop-filter: saturate(180%) blur(18px);
+    color: rgba(255, 255, 255, 0.95);
+  }
+
+  .update-banner {
+    bottom: calc(9.8rem + env(safe-area-inset-bottom, 0));
+    background: rgba(44, 44, 46, 0.88);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: saturate(180%) blur(18px);
+    -webkit-backdrop-filter: saturate(180%) blur(18px);
+  }
+
+  .update-banner span {
     color: rgba(255, 255, 255, 0.95);
   }
 

@@ -13,6 +13,9 @@ const state = {
   profile: {
     username: ''
   },
+  appSettings: {
+    autoUpdate: false
+  },
   routineSchedule: {},
   routineCompletions: {},
   reminderSettings: {
@@ -81,8 +84,14 @@ const DEFAULT_REMINDER_SETTINGS = {
   restDayReminderTime: '10:00',
   streakRiskTime: '20:00'
 };
+const DEFAULT_APP_SETTINGS = {
+  autoUpdate: false
+};
 let reminderCheckInterval = null;
 let levelXpHideTimer = null;
+let pendingServiceWorker = null;
+let swUpdateCheckInterval = null;
+let didTriggerSwReload = false;
 
 // Quests definitions
 const QUESTS = [
@@ -145,6 +154,7 @@ function saveState() {
     workoutTemplates: state.workoutTemplates,
     bodyWeightLogs: state.bodyWeightLogs,
     profile: state.profile,
+    appSettings: state.appSettings,
     routineSchedule: state.routineSchedule,
     routineCompletions: state.routineCompletions,
     reminderSettings: state.reminderSettings,
@@ -212,6 +222,13 @@ function normalizeProfile(input) {
   const profile = input && typeof input === 'object' ? input : {};
   return {
     username: normalizeUsername(profile.username)
+  };
+}
+
+function normalizeAppSettings(input) {
+  const settings = input && typeof input === 'object' ? input : {};
+  return {
+    autoUpdate: settings.autoUpdate == null ? DEFAULT_APP_SETTINGS.autoUpdate : !!settings.autoUpdate
   };
 }
 
@@ -387,6 +404,7 @@ function buildExportPayload() {
     workoutTemplates: state.workoutTemplates,
     bodyWeightLogs: state.bodyWeightLogs,
     profile: state.profile,
+    appSettings: state.appSettings,
     routineSchedule: state.routineSchedule,
     routineCompletions: state.routineCompletions,
     reminderSettings: state.reminderSettings,
@@ -466,7 +484,8 @@ function buildCsvExport() {
     ['routineSchedule', JSON.stringify(state.routineSchedule || {})],
     ['routineCompletions', JSON.stringify(state.routineCompletions || {})],
     ['reminderSettings', JSON.stringify(state.reminderSettings || {})],
-    ['profileUsername', normalizeUsername(state.profile?.username)]
+    ['profileUsername', normalizeUsername(state.profile?.username)],
+    ['autoUpdate', (state.appSettings?.autoUpdate ? 'true' : 'false')]
   ]));
 
   return sections.join('\n');
@@ -498,6 +517,7 @@ function sanitizeImportedState(raw) {
     workoutTemplates: Array.isArray(raw.workoutTemplates) ? raw.workoutTemplates : [],
     bodyWeightLogs: Array.isArray(raw.bodyWeightLogs) ? raw.bodyWeightLogs : [],
     profile: raw.profile && typeof raw.profile === 'object' ? raw.profile : {},
+    appSettings: raw.appSettings && typeof raw.appSettings === 'object' ? raw.appSettings : {},
     routineSchedule: raw.routineSchedule && typeof raw.routineSchedule === 'object' ? raw.routineSchedule : {},
     routineCompletions: raw.routineCompletions && typeof raw.routineCompletions === 'object' ? raw.routineCompletions : {},
     reminderSettings: raw.reminderSettings && typeof raw.reminderSettings === 'object' ? raw.reminderSettings : {},
@@ -519,6 +539,7 @@ function sanitizeImportedState(raw) {
     }))
     .filter(entry => entry.weight != null);
   safe.profile = normalizeProfile(safe.profile);
+  safe.appSettings = normalizeAppSettings(safe.appSettings);
   safe.reminderSettings = normalizeReminderSettings(safe.reminderSettings);
   safe.reminderMeta = normalizeReminderMeta(safe.reminderMeta);
 
@@ -550,6 +571,7 @@ function applyImportedData(importedState, importedToolbarTabs, mode) {
     state.workoutTemplates = mergeById(state.workoutTemplates, importedState.workoutTemplates);
     state.bodyWeightLogs = mergeById(state.bodyWeightLogs, importedState.bodyWeightLogs);
     state.profile = normalizeProfile({ ...(state.profile || {}), ...(importedState.profile || {}) });
+    state.appSettings = normalizeAppSettings({ ...(state.appSettings || {}), ...(importedState.appSettings || {}) });
     state.routineSchedule = { ...(state.routineSchedule || {}), ...(importedState.routineSchedule || {}) };
     state.routineCompletions = { ...(state.routineCompletions || {}), ...(importedState.routineCompletions || {}) };
     state.reminderSettings = normalizeReminderSettings({ ...(state.reminderSettings || {}), ...(importedState.reminderSettings || {}) });
@@ -571,6 +593,7 @@ function applyImportedData(importedState, importedToolbarTabs, mode) {
     state.workoutTemplates = importedState.workoutTemplates;
     state.bodyWeightLogs = importedState.bodyWeightLogs || [];
     state.profile = normalizeProfile(importedState.profile || {});
+    state.appSettings = normalizeAppSettings(importedState.appSettings || {});
     state.routineSchedule = importedState.routineSchedule || {};
     state.routineCompletions = importedState.routineCompletions || {};
     state.reminderSettings = normalizeReminderSettings(importedState.reminderSettings || {});
@@ -593,6 +616,7 @@ function applyImportedData(importedState, importedToolbarTabs, mode) {
   renderProgressExerciseOptions();
   renderBodyWeightProgress();
   renderRoutinePlanner();
+  syncAutoUpdatePreferenceUI();
   evaluateReminderTriggers();
 }
 
@@ -887,15 +911,17 @@ function initToolbarSettings() {
   const authPassword = document.getElementById('authPassword');
   const profileUsername = document.getElementById('profileUsername');
   const saveUsernameBtn = document.getElementById('saveUsernameBtn');
+  const autoUpdateEnabled = document.getElementById('autoUpdateEnabled');
   const remindersEnabled = document.getElementById('remindersEnabled');
   const workoutReminderTime = document.getElementById('workoutReminderTime');
   const restDayRemindersEnabled = document.getElementById('restDayRemindersEnabled');
   const restDayReminderTime = document.getElementById('restDayReminderTime');
   const streakRiskTime = document.getElementById('streakRiskTime');
   const modal = document.getElementById('toolbarSettingsModal');
-  if (!openBtn || !closeBtn || !saveBtn || !modal || !exportJsonBtn || !exportCsvBtn || !importJsonBtn || !importInput || !importMode || !signUpBtn || !signInBtn || !signOutBtn || !syncNowBtn || !authEmail || !authPassword || !profileUsername || !saveUsernameBtn || !remindersEnabled || !workoutReminderTime || !restDayRemindersEnabled || !restDayReminderTime || !streakRiskTime) return;
+  if (!openBtn || !closeBtn || !saveBtn || !modal || !exportJsonBtn || !exportCsvBtn || !importJsonBtn || !importInput || !importMode || !signUpBtn || !signInBtn || !signOutBtn || !syncNowBtn || !authEmail || !authPassword || !profileUsername || !saveUsernameBtn || !autoUpdateEnabled || !remindersEnabled || !workoutReminderTime || !restDayRemindersEnabled || !restDayReminderTime || !streakRiskTime) return;
 
   applyToolbarTabs(getSavedToolbarTabs());
+  state.appSettings = normalizeAppSettings(state.appSettings || {});
   state.reminderSettings = normalizeReminderSettings(state.reminderSettings || {});
   state.reminderMeta = normalizeReminderMeta(state.reminderMeta || {});
 
@@ -912,6 +938,12 @@ function initToolbarSettings() {
     profileUsername.value = normalizeUsername(state.profile?.username);
   }
 
+  function syncAutoUpdateControlFromState() {
+    autoUpdateEnabled.checked = !!state.appSettings?.autoUpdate;
+    syncAutoUpdatePreferenceUI();
+  }
+
+  syncAutoUpdateControlFromState();
   syncReminderControlsFromState();
   syncProfileControlsFromState();
   if (!isNotificationSupported()) {
@@ -924,6 +956,7 @@ function initToolbarSettings() {
 
   openBtn.addEventListener('click', () => {
     renderToolbarOptions(getSavedToolbarTabs());
+    syncAutoUpdateControlFromState();
     syncReminderControlsFromState();
     syncProfileControlsFromState();
     modal.classList.remove('hidden');
@@ -1056,6 +1089,15 @@ function initToolbarSettings() {
     saveState();
     renderDashboardWelcome();
     showToast(nextUsername ? `Username saved: ${nextUsername}` : 'Username cleared');
+  });
+
+  autoUpdateEnabled.addEventListener('change', () => {
+    state.appSettings = normalizeAppSettings({ ...(state.appSettings || {}), autoUpdate: autoUpdateEnabled.checked });
+    saveState();
+    syncAutoUpdatePreferenceUI();
+    if (state.appSettings.autoUpdate && pendingServiceWorker) {
+      applyPendingServiceWorkerUpdate();
+    }
   });
 
   remindersEnabled.addEventListener('change', async () => {
@@ -2583,9 +2625,92 @@ function initReminderSystem() {
   window.addEventListener('online', () => evaluateReminderTriggers());
 }
 
-// Register Service Worker for PWA
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(() => {});
+function setUpdateStatus(message, isError = false) {
+  const el = document.getElementById('updateStatus');
+  if (!el) return;
+  el.textContent = message || '';
+  el.style.color = isError ? '#ef4444' : '';
+}
+
+function syncAutoUpdatePreferenceUI() {
+  const isEnabled = !!state.appSettings?.autoUpdate;
+  const checkbox = document.getElementById('autoUpdateEnabled');
+  if (checkbox) checkbox.checked = isEnabled;
+  setUpdateStatus(isEnabled ? 'Auto-update is on. New versions apply when available.' : 'Auto-update is off. You will be prompted before updating.');
+}
+
+function applyPendingServiceWorkerUpdate() {
+  if (!pendingServiceWorker) return;
+  setUpdateBannerVisible(false);
+  pendingServiceWorker.postMessage({ type: 'SKIP_WAITING' });
+  showToast('Updating app...');
+}
+
+function setUpdateBannerVisible(visible) {
+  const banner = document.getElementById('updateBanner');
+  if (!banner) return;
+  banner.classList.toggle('hidden', !visible);
+}
+
+function handleServiceWorkerWaiting(worker) {
+  pendingServiceWorker = worker || null;
+  if (!pendingServiceWorker) return;
+  if (state.appSettings?.autoUpdate) {
+    applyPendingServiceWorkerUpdate();
+  } else {
+    setUpdateBannerVisible(true);
+    setUpdateStatus('Update available. Review and apply when ready.');
+  }
+}
+
+function initServiceWorkerUpdates() {
+  const updateNowBtn = document.getElementById('updateNowBtn');
+  const dismissUpdateBtn = document.getElementById('dismissUpdateBtn');
+  if (updateNowBtn && !updateNowBtn.dataset.bound) {
+    updateNowBtn.dataset.bound = '1';
+    updateNowBtn.addEventListener('click', () => applyPendingServiceWorkerUpdate());
+  }
+  if (dismissUpdateBtn && !dismissUpdateBtn.dataset.bound) {
+    dismissUpdateBtn.dataset.bound = '1';
+    dismissUpdateBtn.addEventListener('click', () => setUpdateBannerVisible(false));
+  }
+
+  if (!('serviceWorker' in navigator)) {
+    setUpdateStatus('Automatic app updates are not supported in this browser.', true);
+    return;
+  }
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (didTriggerSwReload) return;
+    didTriggerSwReload = true;
+    pendingServiceWorker = null;
+    window.location.reload();
+  });
+
+  navigator.serviceWorker.register('./sw.js').then((registration) => {
+    const monitorInstalling = (worker) => {
+      if (!worker) return;
+      worker.addEventListener('statechange', () => {
+        if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+          handleServiceWorkerWaiting(registration.waiting || worker);
+        }
+      });
+    };
+
+    if (registration.waiting) handleServiceWorkerWaiting(registration.waiting);
+    if (registration.installing) monitorInstalling(registration.installing);
+
+    registration.addEventListener('updatefound', () => {
+      monitorInstalling(registration.installing);
+    });
+
+    if (swUpdateCheckInterval) clearInterval(swUpdateCheckInterval);
+    swUpdateCheckInterval = setInterval(() => {
+      registration.update().catch(() => {});
+    }, 15 * 60 * 1000);
+  }).catch(() => {
+    setUpdateStatus('Could not initialize app update checks.', true);
+  });
 }
 
 // Init
@@ -2595,6 +2720,7 @@ state.gymWorkouts = state.gymWorkouts || [];
 state.workoutTemplates = state.workoutTemplates || [];
 state.bodyWeightLogs = state.bodyWeightLogs || [];
 state.profile = normalizeProfile(state.profile || {});
+state.appSettings = normalizeAppSettings(state.appSettings || {});
 state.routineSchedule = state.routineSchedule || {};
 state.routineCompletions = state.routineCompletions || {};
 state.reminderSettings = normalizeReminderSettings(state.reminderSettings || {});
@@ -2610,3 +2736,4 @@ initWorkoutSubpages();
 initProgressTab();
 initHard75();
 initIOSHeaderBehavior();
+initServiceWorkerUpdates();

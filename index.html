@@ -28,10 +28,6 @@
       </div>
       <div class="header-controls">
         <div class="player-stats">
-          <div class="stat profile-chip">
-            <span class="stat-label">Profile</span>
-            <span class="stat-value" id="headerUsername">Adventurer</span>
-          </div>
           <div class="stat level-badge" id="levelBadge" title="Tap to view XP">
             <span class="stat-label">Level</span>
             <span class="stat-value" id="playerLevel">1</span>
@@ -46,6 +42,11 @@
         <button type="button" class="toolbar-settings-btn" id="openToolbarSettings" title="Customize toolbar">⚙️</button>
       </div>
     </header>
+    <div class="header-username-row">
+      <div class="profile-chip">
+        <span class="profile-chip-text" id="headerUsername">Adventurer</span>
+      </div>
+    </div>
 
     <nav class="nav-tabs">
       <button class="nav-tab active" data-tab="dashboard" data-nav-id="dashboard">
@@ -125,6 +126,15 @@
             <input type="time" id="streakRiskTime" value="20:00">
           </div>
           <p id="reminderStatus" class="data-action-status"></p>
+
+          <div class="settings-divider"></div>
+          <h4 class="settings-title">App Updates</h4>
+          <p class="settings-note">Prompt for new versions, or auto-apply updates when available.</p>
+          <div class="settings-inline reminder-toggle-row">
+            <label for="autoUpdateEnabled">Auto-update app</label>
+            <input type="checkbox" id="autoUpdateEnabled">
+          </div>
+          <p id="updateStatus" class="data-action-status"></p>
 
           <div class="settings-divider"></div>
           <h4 class="settings-title">Data Management</h4>
@@ -456,6 +466,11 @@
       </section>
     </main>
     <div id="appToast" class="app-toast" role="status" aria-live="polite"></div>
+    <div id="updateBanner" class="update-banner hidden" role="status" aria-live="polite">
+      <span>New version available.</span>
+      <button type="button" class="btn btn-secondary" id="updateNowBtn">Update now</button>
+      <button type="button" class="btn btn-secondary" id="dismissUpdateBtn">Later</button>
+    </div>
   </div>
 
   <script src="cloud-config.js"></script>
