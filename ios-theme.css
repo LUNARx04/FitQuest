@@ -59,12 +59,15 @@
   .player-stats {
     gap: 0.5rem;
     flex-wrap: nowrap;
-    overflow-x: auto;
+    overflow: visible;
     scrollbar-width: none;
   }
 
-  .player-stats::-webkit-scrollbar {
-    display: none;
+  .header-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
   }
 
   .stat-label {
@@ -84,6 +87,12 @@
     backdrop-filter: blur(10px);
     border: 1px solid var(--glass-border);
     border-radius: var(--radius-md);
+    min-width: 58px;
+  }
+
+  .level-xp-inline {
+    color: rgba(235, 235, 245, 0.78);
+    font-size: 0.64rem;
   }
 
   .profile-chip {

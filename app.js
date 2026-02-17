@@ -82,6 +82,7 @@ const DEFAULT_REMINDER_SETTINGS = {
   streakRiskTime: '20:00'
 };
 let reminderCheckInterval = null;
+let levelXpHideTimer = null;
 
 // Quests definitions
 const QUESTS = [
@@ -229,6 +230,27 @@ function renderDashboardWelcome() {
   if (!title) return;
   title.textContent = `Welcome, ${displayName}!`;
   if (headerUsername) headerUsername.textContent = displayName;
+}
+
+function renderLevelBadgeXpText() {
+  const xpInline = document.getElementById('levelXpInline');
+  if (!xpInline) return;
+  xpInline.textContent = `${state.xp} / ${state.xpToNextLevel} XP`;
+}
+
+function initHeaderLevelBadge() {
+  const levelBadge = document.getElementById('levelBadge');
+  const xpInline = document.getElementById('levelXpInline');
+  if (!levelBadge || !xpInline) return;
+  renderLevelBadgeXpText();
+  levelBadge.addEventListener('click', () => {
+    renderLevelBadgeXpText();
+    levelBadge.classList.add('show-xp');
+    clearTimeout(levelXpHideTimer);
+    levelXpHideTimer = setTimeout(() => {
+      levelBadge.classList.remove('show-xp');
+    }, 2200);
+  });
 }
 
 function isNotificationSupported() {
@@ -1218,8 +1240,11 @@ function updateUI() {
   document.getElementById('streakCount').textContent = state.streak;
 
   const xpPercent = (state.xp / state.xpToNextLevel) * 100;
-  document.getElementById('xpFill').style.width = `${xpPercent}%`;
-  document.getElementById('xpText').textContent = `${state.xp} / ${state.xpToNextLevel}`;
+  const xpFill = document.getElementById('xpFill');
+  const xpText = document.getElementById('xpText');
+  if (xpFill) xpFill.style.width = `${xpPercent}%`;
+  if (xpText) xpText.textContent = `${state.xp} / ${state.xpToNextLevel}`;
+  renderLevelBadgeXpText();
 
   renderTodayQuests();
   renderRecentActivity();
@@ -2579,6 +2604,7 @@ updateUI();
 initCloudSync();
 initToolbarSettings();
 initReminderSystem();
+initHeaderLevelBadge();
 initGymTracker();
 initWorkoutSubpages();
 initProgressTab();

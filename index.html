@@ -26,26 +26,22 @@
         <span class="logo-icon">⚔️</span>
         <h1>FitQuest</h1>
       </div>
-      <div class="player-stats">
-        <div class="stat profile-chip">
-          <span class="stat-label">Profile</span>
-          <span class="stat-value" id="headerUsername">Adventurer</span>
-        </div>
-        <div class="stat level-badge">
-          <span class="stat-label">Level</span>
-          <span class="stat-value" id="playerLevel">1</span>
-        </div>
-        <div class="stat xp-bar-container">
-          <span class="stat-label">XP</span>
-          <div class="xp-bar">
-            <div class="xp-fill" id="xpFill"></div>
+      <div class="header-controls">
+        <div class="player-stats">
+          <div class="stat profile-chip">
+            <span class="stat-label">Profile</span>
+            <span class="stat-value" id="headerUsername">Adventurer</span>
           </div>
-          <span class="xp-text" id="xpText">0 / 100</span>
-        </div>
-        <div class="stat streak">
-          <span class="stat-label">Streak</span>
-          <span class="stat-value" id="streakCount">0</span>
-          <span class="streak-icon">🔥</span>
+          <div class="stat level-badge" id="levelBadge" title="Tap to view XP">
+            <span class="stat-label">Level</span>
+            <span class="stat-value" id="playerLevel">1</span>
+            <span class="level-xp-inline" id="levelXpInline"></span>
+          </div>
+          <div class="stat streak">
+            <span class="stat-label">Streak</span>
+            <span class="stat-value" id="streakCount">0</span>
+            <span class="streak-icon">🔥</span>
+          </div>
         </div>
         <button type="button" class="toolbar-settings-btn" id="openToolbarSettings" title="Customize toolbar">⚙️</button>
       </div>
