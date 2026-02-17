@@ -1,5 +1,5 @@
 // FitQuest Service Worker
-const CACHE_NAME = 'fitquest-v3';
+const CACHE_NAME = 'fitquest-v4';
 const ASSETS = [
   './',
   './index.html',
@@ -9,7 +9,8 @@ const ASSETS = [
   './cloud-config.js',
   './exercises.js',
   './manifest.json',
-  './icon.svg'
+  './icon.png',
+  './apple-touch-icon.png'
 ];
 
 self.addEventListener('install', (e) => {
